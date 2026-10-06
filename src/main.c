@@ -5,13 +5,17 @@
 int main(void)
 {
     Tracker tracker;
+    Sensors sensors;
     TrackerReset(&tracker);
-    InitWindow(1100, 700, "Delivery Parcel Tracker");
+    SensorsReset(&sensors);
+    InitWindow(1100, 840, "Delivery Parcel Tracker");
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
-        TrackerUpdate(&tracker, GetFrameTime());
+        float delta_seconds = GetFrameTime();
+        TrackerUpdate(&tracker, delta_seconds);
+        SensorsUpdate(&sensors, delta_seconds);
         BeginDrawing();
-        DashboardDraw(&tracker);
+        DashboardDraw(&tracker, &sensors);
         EndDrawing();
     }
     CloseWindow();

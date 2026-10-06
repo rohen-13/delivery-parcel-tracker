@@ -9,6 +9,9 @@ An IoT monitoring prototype written in C and Raylib. The first version simulates
 - Start/resume, pause and reset controls.
 - A 20-second journey, with movement based on elapsed time.
 - Explicit simulation mode; no physical hardware is required.
+- Live simulated temperature with heat and cooling controls and a 30 C demo alert.
+- Impact trigger and cumulative impact count. Reset clears delivery and sensor state.
+- Sensor monitoring continues while parcel movement is paused.
 
 ## Run on macOS
 
@@ -36,11 +39,12 @@ For a double-clickable Mac app, run `make app` and open `build/Delivery Parcel T
 
 ## Next features
 
-Simulated temperature readings, impact alerts, tracker connection status and timestamped event history. These are planned and are not implemented yet.
+Tracker connection status and timestamped event history are planned and are not implemented yet. Temperature limits are fictional demonstration values.
 
 ## Demo
 
 Start the delivery, pause partway along the route, resume to reach the destination, then reset to return to the depot.
+Use Trigger heat to raise the reading gradually to 40 C, Stop heat to cool to 20 C, and Trigger impact to record one impact. The heat alert appears at 30 C. Reset returns temperature to 20 C and clears impacts.
 
 ## Team
 

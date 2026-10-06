@@ -6,9 +6,9 @@ RAYLIB_LIBS = $(shell pkg-config --libs raylib)
 .PHONY: all run app test clean
 all: build/parcel-tracker
 
-build/parcel-tracker: src/main.c src/dashboard.c src/tracker.c src/dashboard.h src/tracker.h
+build/parcel-tracker: src/main.c src/dashboard.c src/tracker.c src/sensors.c src/dashboard.h src/tracker.h src/sensors.h
 	mkdir -p build
-	$(CC) $(CFLAGS) $(RAYLIB_CFLAGS) src/main.c src/dashboard.c src/tracker.c -o $@ $(RAYLIB_LIBS) -lm
+	$(CC) $(CFLAGS) $(RAYLIB_CFLAGS) src/main.c src/dashboard.c src/tracker.c src/sensors.c -o $@ $(RAYLIB_LIBS) -lm
 
 run: all
 	./build/parcel-tracker

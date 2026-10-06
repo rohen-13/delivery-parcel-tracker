@@ -14,8 +14,8 @@ Create a `Sensors` instance and call `SensorsReset` before use. Call `SensorsUpd
 
 The dashboard can read `temperature_c`, `impact_count` and `SensorsHeatAlert`. Its heat, stop-heat and impact controls should call the corresponding functions once per button press. The application's Reset control should reset both the tracker and sensors.
 
-The current application does not yet call this module or display its readings. Shared tracker interfaces and Oleksandr's dashboard are untouched. Connection status, timestamped event history and CSV export remain future work. This module and API are ready for teammate review before those consumers are connected.
+The application now initialises and updates the module each frame. The dashboard displays temperature, heat alert and impact count, and provides heat, stop-heat and impact controls. Reset clears both tracker and sensor state. Monitoring continues while parcel movement is paused. Connection status, timestamped event history and CSV export remain future work.
 
 ## Verification
 
-The new test first failed because the sensor implementation did not exist. After implementation, `make test` verifies baseline readings, gradual heating, the alert threshold, target clamping, cooling and alert resolution, one impact per trigger, invalid elapsed-time inputs, frame-size independence and full reset. Local graphical validation remains pending the Raylib prerequisite.
+The new test first failed because the sensor implementation did not exist. After implementation, `make test` verifies baseline readings, gradual heating, the alert threshold, target clamping, cooling and alert resolution, one impact per trigger, invalid elapsed-time inputs, frame-size independence and full reset. Raylib is now installed and the integrated application builds successfully.

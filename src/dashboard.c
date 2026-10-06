@@ -5,6 +5,7 @@ static const Color BG = {16, 23, 38, 255};
 static const Color PANEL = {27, 38, 57, 255};
 static const Color MUTED = {156, 173, 197, 255};
 static const Color ACCENT = {65, 211, 171, 255};
+static const Color WARNING = {255, 190, 100, 255};
 
 static bool Button(Rectangle bounds, const char *label, bool enabled)
 {
@@ -17,7 +18,7 @@ static bool Button(Rectangle bounds, const char *label, bool enabled)
     return enabled && hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
-void DashboardDraw(Tracker *tracker)
+void DashboardDraw(Tracker *tracker, Sensors *sensors)
 {
     const Vector2 route[] = {{110, 370}, {350, 290}, {610, 390}, {850, 300}};
     const char *labels[] = {"Depot", "Checkpoint 1", "Checkpoint 2", "Destination"};
@@ -67,7 +68,22 @@ void DashboardDraw(Tracker *tracker)
         if (progress > 0.0f) DrawRectangleRounded((Rectangle){40, 515, 1020*progress, 12}, 0.4f, 6, ACCENT);
         if (Button((Rectangle){40, 558, 175, 52}, tracker->elapsed_seconds > 0.0f ? "Resume" : "Start", !tracker->running && progress < 1.0f)) TrackerStart(tracker);
         if (Button((Rectangle){235, 558, 175, 52}, "Pause", tracker->running)) TrackerPause(tracker);
-        if (Button((Rectangle){430, 558, 175, 52}, "Reset", true)) TrackerReset(tracker);
-        DrawText("20-second simulated journey | No physical tracker connected", 42, 645, 17, MUTED);
+        if (Button((Rectangle){430, 558, 175, 52}, "Reset", true)) {
+            TrackerReset(tracker);
+            SensorsReset(sensors);
+        }
+        DrawRectangleRounded((Rectangle){40, 635, 1020, 90}, 0.15f, 8, PANEL);
+        DrawText("TEMPERATURE", 64, 651, 15, MUTED);
+        DrawText(TextFormat("%.1f C", sensors->temperature_c), 64, 677, 24, RAYWHITE);
+        bool heat_alert = SensorsHeatAlert(sensors);
+        DrawText(heat_alert ? "HEAT ALERT - 30 C or above" : "Temperature below demo threshold",
+                 260, 677, 18, heat_alert ? WARNING : ACCENT);
+        DrawText("IMPACT EVENTS", 790, 651, 15, MUTED);
+        DrawText(TextFormat("%u", sensors->impact_count), 790, 677, 24,
+                 sensors->impact_count > 0 ? WARNING : RAYWHITE);
+        if (Button((Rectangle){40, 741, 175, 52}, "Trigger heat", !sensors->heating)) SensorsTriggerHeat(sensors);
+        if (Button((Rectangle){235, 741, 175, 52}, "Stop heat", sensors->heating)) SensorsStopHeat(sensors);
+        if (Button((Rectangle){430, 741, 175, 52}, "Trigger impact", true)) SensorsTriggerImpact(sensors);
+        DrawText("Simulated sensors stay active while paused | Demo values only", 42, 810, 17, MUTED);
 
 }
