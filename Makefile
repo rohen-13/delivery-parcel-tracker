@@ -25,3 +25,5 @@ test:
 	mkdir -p build
 	$(CC) $(CFLAGS) tests/test_tracker.c src/tracker.c -o build/test-tracker
 	./build/test-tracker
+	$(CC) $(CFLAGS) tests/test_sensors.c src/sensors.c -o build/test-sensors -lm
+	./build/test-sensors
