@@ -1,7 +1,7 @@
 CC = clang
 CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -O2
-RAYLIB_CFLAGS := $(shell pkg-config --cflags raylib)
-RAYLIB_LIBS := $(shell pkg-config --libs raylib)
+RAYLIB_CFLAGS = $(shell pkg-config --cflags raylib)
+RAYLIB_LIBS = $(shell pkg-config --libs raylib)
 
 .PHONY: all run app test clean
 all: build/parcel-tracker
