@@ -8,7 +8,9 @@ int main(void)
     Sensors sensors;
     TrackerReset(&tracker);
     SensorsReset(&sensors);
-    InitWindow(1100, 840, "Delivery Parcel Tracker");
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    InitWindow(1280, 820, "Delivery Parcel Tracker");
+    DashboardInit();
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
         float delta_seconds = GetFrameTime();
@@ -18,6 +20,7 @@ int main(void)
         DashboardDraw(&tracker, &sensors);
         EndDrawing();
     }
+    DashboardClose();
     CloseWindow();
     return 0;
 }

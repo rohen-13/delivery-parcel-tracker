@@ -6,5 +6,7 @@
 #include "raylib.h"
 
 void DashboardDraw(Tracker *tracker, Sensors *sensors);
+void DashboardInit(void);
+void DashboardClose(void);
 
 #endif
