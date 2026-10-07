@@ -1,6 +1,8 @@
 #include "dashboard.h"
 #include <math.h>
 #include <stddef.h>
+#include <errno.h>
+#include <stdio.h>
 
 static const Color BG = {12,17,23,255}, SURFACE = {20,28,36,255};
 static const Color INK = {235,240,246,255}, MUTED = {153,170,186,255};
@@ -8,6 +10,29 @@ static const Color BORDER = {43,57,69,255}, ACCENT = {203,239,105,255};
 static const Color GOOD = {121,216,177,255}, AMBER = {255,185,112,255};
 static Font font;
 static bool custom_font;
+static int export_status;
+static char export_name[32];
+
+static void ExportEvents(const Sensors *sensors)
+{
+    export_status = -1;
+    for (unsigned int i = 1; i <= 999; ++i) {
+        char path[4096];
+        snprintf(export_name, sizeof(export_name), "events-%03u.csv", i);
+        int length = snprintf(path, sizeof(path), "%s%s", GetApplicationDirectory(), export_name);
+        if (length < 0 || (size_t)length >= sizeof(path)) return;
+        /* Exclusive creation preserves reports from earlier exports/runs. */
+        FILE *output = fopen(path, "wx");
+        if (!output) {
+            if (errno == EEXIST) continue;
+            return;
+        }
+        bool written = SensorsWriteCSV(sensors, output);
+        int closed = fclose(output);
+        if (written && closed == 0) export_status = 1;
+        return;
+    }
+}
 
 void DashboardInit(void)
 {
@@ -50,8 +75,8 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     ClearBackground(BG);
 
     /* Shipment rail: actual state and controls, with no decorative navigation. */
-    DrawRectangle(0,0,280,820,SURFACE);
-    DrawLine(280,0,280,820,BORDER);
+    DrawRectangle(0,0,280,1040,SURFACE);
+    DrawLine(280,0,280,1040,BORDER);
     DrawRectangleRounded((Rectangle){28,28,34,34},0.2f,8,ACCENT);
     DrawRectangleLinesEx((Rectangle){37,36,16,18},2,BG);
     DrawLine(45,36,45,45,BG);
@@ -64,23 +89,33 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     DrawCircle(34,271,5,tracker->running ? ACCENT : MUTED);
     Text(TrackerStatus(tracker),49,257,24,INK);
     Text("ROUTE PROGRESS",28,317,11,MUTED);
-    Text(TextFormat("%.0f",progress*100),28,342,56,INK);
-    Text("%",113,369,21,MUTED);
+    const char *percent = TextFormat("%.0f",progress*100);
+    Text(percent,28,342,56,INK);
+    Text("%",40 + MeasureTextEx(font,percent,56,0).x,369,21,MUTED);
     DrawRectangleRounded((Rectangle){28,416,224,6},1,8,BORDER);
     if (progress>0) DrawRectangleRounded((Rectangle){28,416,224*progress,6},1,8,ACCENT);
     Text("20 second simulated journey",28,440,13,MUTED);
     DrawLine(28,484,252,484,BORDER);
     Text("DELIVERY CONTROLS",28,511,11,MUTED);
-    if (Button((Rectangle){28,542,224,44},tracker->elapsed_seconds>0 ? "Resume delivery" : "Start delivery",
+    if (Button((Rectangle){28,542,224,44},progress >= 1.0f ? "Delivery complete" : tracker->elapsed_seconds>0 ? "Resume delivery" : "Start delivery",
                !tracker->running && progress<1,true)) TrackerStart(tracker);
     if (Button((Rectangle){28,598,104,44},"Pause",tracker->running,false)) TrackerPause(tracker);
     if (Button((Rectangle){144,598,108,44},"Reset all",true,false)) {
         TrackerReset(tracker);
         SensorsReset(sensors);
     }
-    Text("C + RAYLIB",28,731,12,MUTED);
-    Text("Advanced Programming",28,756,14,INK);
-    Text("Prototype / simulation",28,781,12,MUTED);
+    if (Button((Rectangle){28,660,224,40},sensors->connected ? "Disconnect tracker" : "Reconnect tracker",true,false))
+        SensorsSetConnected(sensors,!sensors->connected);
+    Text(sensors->connected ? "Telemetry connected" : "Telemetry disconnected",28,714,13,
+         sensors->connected ? GOOD : AMBER);
+    if (export_status) {
+        Text(export_status > 0 ? TextFormat("Saved %s",export_name) : "CSV export failed",28,776,13,
+             export_status > 0 ? GOOD : AMBER);
+        Text(export_status > 0 ? "Beside the app executable" : "Check folder access; retry export",28,800,12,MUTED);
+    }
+    Text("C + RAYLIB",28,960,12,MUTED);
+    Text("Advanced Programming",28,983,14,INK);
+    Text("Prototype / simulation",28,1007,12,MUTED);
 
     Text("Delivery overview",308,28,30,INK);
     Text("Follow the shipment. Inspect its handling conditions.",309,68,15,MUTED);
@@ -151,31 +186,44 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     Text("TEMPERATURE",332,547,12,MUTED);
     Text(TextFormat("%.1f",sensors->temperature_c),332,575,53,INK);
     Text("C",463,597,24,MUTED);
-    Color thermal=alert ? AMBER : GOOD;
-    Text(alert ? "HEAT ALERT" : "BELOW THRESHOLD",572,589,13,thermal);
-    Text("Demo threshold: 30 C",572,613,12,MUTED);
+    Color thermal=alert || !sensors->connected ? AMBER : GOOD;
+    Text(!sensors->connected ? "STALE READING" : alert ? "HEAT ALERT" : "BELOW THRESHOLD",572,589,13,thermal);
+    Text(!sensors->connected ? TextFormat("Last reading %.1fs ago",sensors->stale_seconds) : "Demo threshold: 30 C",572,613,12,MUTED);
     DrawRectangleRounded((Rectangle){332,648,416,7},1,8,BORDER);
     float level=fminf(fmaxf((sensors->temperature_c-20)/20,0),1);
     if (level>0) DrawRectangleRounded((Rectangle){332,648,416*level,7},1,8,thermal);
     DrawLine(540,643,540,660,AMBER);
     Text("20 C baseline",332,668,11,MUTED);
     Text("40 C heat target",667,668,11,MUTED);
-    if (Button((Rectangle){332,702,170,36},sensors->heating ? "Stop heat scenario" : "Trigger heat",true,false)) {
+    if (Button((Rectangle){332,702,170,36},sensors->heating ? "Stop heat scenario" : "Trigger heat",sensors->connected,false)) {
         if (sensors->heating) SensorsStopHeat(sensors);
         else SensorsTriggerHeat(sensors);
     }
-    Text(sensors->heating ? "Heating at 2 C / second" : "Baseline / cooling",526,714,12,MUTED);
+    Text(!sensors->connected ? "Monitoring suspended" : sensors->heating ? "Heating at 2 C / second" : "Baseline / cooling",526,714,12,MUTED);
 
     Card((Rectangle){792,524,460,232});
     Text("HANDLING IMPACTS",816,547,12,MUTED);
     Text(TextFormat("%u",sensors->impact_count),816,575,sensors->impact_count>9999 ? 34 : 53,INK);
-    Text(sensors->impact_count ? "IMPACT RECORDED" : "NO IMPACTS",1000,589,13,sensors->impact_count ? AMBER : GOOD);
+    Text(!sensors->connected ? "LAST KNOWN COUNT" : sensors->impact_count ? "IMPACT RECORDED" : "NO IMPACTS",1000,589,13,sensors->impact_count || !sensors->connected ? AMBER : GOOD);
     Text("Cumulative since last reset",1000,613,12,MUTED);
     DrawLine(816,648,1228,648,BORDER);
     Text("A trigger records one simulated impact.",816,666,13,MUTED);
-    if (Button((Rectangle){816,702,170,36},"Trigger impact",true,false)) SensorsTriggerImpact(sensors);
+    if (Button((Rectangle){816,702,170,36},"Trigger impact",sensors->connected,false)) SensorsTriggerImpact(sensors);
     Text("Reset all clears the count",1000,714,12,MUTED);
 
-    Text("Sensors continue monitoring while delivery is paused.",308,783,13,MUTED);
-    Text("DEMO DATA / NO PHYSICAL DEVICE",1022,783,11,MUTED);
+    Card((Rectangle){308,776,944,208});
+    Text("RECENT SENSOR EVENTS",332,796,12,MUTED);
+    if (Button((Rectangle){700,784,170,36},"Export CSV (E)",true,false) || IsKeyPressed(KEY_E))
+        ExportEvents(sensors);
+    Text("Elapsed simulation time / latest 4 / capacity 32",906,796,11,MUTED);
+    unsigned int first = sensors->event_count > 4 ? sensors->event_count - 4 : 0;
+    for (unsigned int i=first; i<sensors->event_count; ++i) {
+        const SensorEvent *event = &sensors->events[i];
+        float y = 831 + (i-first)*34;
+        Text(TextFormat("%.1f s",event->seconds),332,y,14,MUTED);
+        Text(SensorsEventName(event->kind),458,y,15,INK);
+        Text(TextFormat("%.1f C",event->temperature_c),1130,y,14,MUTED);
+    }
+    Text("Sensors monitor while paused; disconnection freezes readings.",308,1005,13,MUTED);
+    Text("DEMO DATA / NO PHYSICAL DEVICE",1022,1005,11,MUTED);
 }

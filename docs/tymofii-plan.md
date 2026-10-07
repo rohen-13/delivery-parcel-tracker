@@ -2,7 +2,13 @@
 
 Prepared on 6 October 2026 for Tymofii (TymofiiZuren). This is a proposed personal work plan, building on the existing team plan. Oleksandr owns the dashboard; Tymofii owns tracking, sensor simulation, connection state and event history. Shared interface changes need agreement between both members.
 
-## Current evidence
+## Progress update — 7 October 2026
+
+The original evidence below is a 6 October snapshot, not the current implementation status. The tracking branch now includes temperature/impact simulation, independent monitoring while delivery is paused, connection/stale-reading handling and bounded timestamped sensor history. CSV export is implemented as the next planned tracking feature: Export CSV saves up to 32 retained events without overwriting existing reports. See README for the columns and output location.
+
+CSV verification: `make test`, `make app`, address/undefined-behaviour sensor sanitizer checks and `git diff --check` pass. The dashboard export button produced a CSV whose reset, impact and disconnect rows were inspected. Runtime verification of repeated exports and the E shortcut was interrupted by app-control errors; those checks remain pending. No journal, upload, teammate review or second-Mac validation is claimed by this update.
+
+## Original evidence — 6 October
 
 - Pulled `main` with `git pull --ff-only`, bringing in the C/Raylib prototype and team workflow through `eb2ba03`.
 - Switched to the existing remote branch `tymofii/tracking`.

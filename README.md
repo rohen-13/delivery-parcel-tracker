@@ -12,6 +12,9 @@ An IoT monitoring prototype written in C and Raylib. The first version simulates
 - Live simulated temperature with heat and cooling controls and a 30 C demo alert.
 - Impact trigger and cumulative impact count. Reset clears delivery and sensor state.
 - Sensor monitoring continues while parcel movement is paused.
+- Simulated disconnect/reconnect controls, with frozen readings and stale-reading age while disconnected.
+- Timestamped sensor history: the latest four events are displayed, with up to 32 retained in memory.
+- Export retained sensor events to CSV using Export CSV or the E key, without overwriting earlier exports.
 
 ## Run on macOS
 
@@ -39,12 +42,19 @@ For a double-clickable Mac app, run `make app` and open `build/Delivery Parcel T
 
 ## Next features
 
-Tracker connection status and timestamped event history are planned and are not implemented yet. Temperature limits are fictional demonstration values.
+Physical hardware integration is not implemented. Temperature limits are fictional demonstration values. Event times are elapsed simulation seconds, not wall-clock timestamps; history is not saved between runs unless exported.
+
+## Event export
+
+Click **Export CSV (E)** or press E. Each export saves the currently retained events (at most 32), oldest first, with `elapsed_seconds`, `event` and `temperature_c` columns. Older events that have fallen out of the bounded history are not included. Export does not clear history and works while disconnected or paused.
+
+Files are numbered `events-001.csv` through `events-999.csv` beside the executable: `build/` for `make run`, or `build/Delivery Parcel Tracker.app/Contents/MacOS/` for the Mac app. Right-click the app and choose Show Package Contents to access its exports. The dashboard confirms success or reports a failure; check directory write access or whether all 999 names are occupied before retrying. Existing exports are never overwritten. Reset clears only live history, not saved CSV files.
 
 ## Demo
 
 Start the delivery, pause partway along the route, resume to reach the destination, then reset to return to the depot.
 Use Trigger heat to raise the reading gradually to 40 C, Stop heat to cool to 20 C, and Trigger impact to record one impact. The heat alert appears at 30 C. Reset returns temperature to 20 C and clears impacts.
+Disconnect tracker to freeze telemetry and disable sensor triggers. Reconnect resumes monitoring without clearing impacts or the heat scenario. Delivery movement remains independent of telemetry connection. Reset restores the connection and clears history, leaving a single reset event at time zero.
 
 ## Team
 

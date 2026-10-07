@@ -9,7 +9,7 @@ int main(void)
     TrackerReset(&tracker);
     SensorsReset(&sensors);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(1280, 820, "Delivery Parcel Tracker");
+    InitWindow(1280, 1040, "Delivery Parcel Tracker");
     DashboardInit();
     SetTargetFPS(60);
     while (!WindowShouldClose()) {

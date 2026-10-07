@@ -1,6 +1,7 @@
 #include "../src/tracker.h"
 #include <assert.h>
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 
 int main(void)
@@ -12,6 +13,9 @@ int main(void)
     TrackerUpdate(&t, 10.0f);
     assert(TrackerProgress(&t) == 0.0f);
     TrackerStart(&t);
+    TrackerUpdate(&t, NAN);
+    TrackerUpdate(&t, INFINITY);
+    assert(TrackerProgress(&t) == 0.0f && t.running);
     TrackerUpdate(&t, 5.0f);
     assert(TrackerProgress(&t) == 0.25f);
     assert(strcmp(TrackerStatus(&t), "In transit") == 0);
