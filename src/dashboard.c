@@ -97,7 +97,9 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     Text("20 second simulated journey",28,440,13,MUTED);
     DrawLine(28,484,252,484,BORDER);
     Text("DELIVERY CONTROLS",28,511,11,MUTED);
-    if (Button((Rectangle){28,542,224,44},progress >= 1.0f ? "Delivery complete" : tracker->elapsed_seconds>0 ? "Resume delivery" : "Start delivery",
+    const char *delivery_action = progress >= 1 ? "Delivered" : tracker->running ? "Delivery running" :
+                                  tracker->elapsed_seconds > 0 ? "Resume delivery" : "Start delivery";
+    if (Button((Rectangle){28,542,224,44},delivery_action,
                !tracker->running && progress<1,true)) TrackerStart(tracker);
     if (Button((Rectangle){28,598,104,44},"Pause",tracker->running,false)) TrackerPause(tracker);
     if (Button((Rectangle){144,598,108,44},"Reset all",true,false)) {
@@ -113,6 +115,9 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
              export_status > 0 ? GOOD : AMBER);
         Text(export_status > 0 ? "Beside the app executable" : "Check folder access; retry export",28,800,12,MUTED);
     }
+    Text("ALERT SUMMARY",28,844,11,MUTED);
+    Text(!sensors->connected ? "Temperature reading is stale" : alert ? "Heat threshold exceeded" : "Temperature below threshold",28,866,13,!sensors->connected || alert ? AMBER : GOOD);
+    Text(sensors->impact_count ? "Impact history recorded" : "No recorded impacts",28,887,13,sensors->impact_count ? AMBER : MUTED);
     Text("C + RAYLIB",28,960,12,MUTED);
     Text("Advanced Programming",28,983,14,INK);
     Text("Prototype / simulation",28,1007,12,MUTED);
@@ -163,13 +168,17 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     float checkpoint_distance=0;
     for (int i=0;i<4;++i) {
         if (i>0) checkpoint_distance+=lengths[i-1];
-        bool reached=progress*total>=checkpoint_distance;
+        /* Use the same cumulative distance as parcel placement, not equal thirds. */
+        bool reached=progress >= 1 || progress*total>=checkpoint_distance;
         DrawCircleV(route[i],9,SURFACE);
         DrawCircleLinesV(route[i],9,reached ? ACCENT : MUTED);
         DrawCircleV(route[i],3,reached ? ACCENT : MUTED);
         float width=MeasureTextEx(font,names[i],11,0).x;
         DrawRectangleRounded((Rectangle){route[i].x-width/2-8,route[i].y+20,width+16,25},0.2f,8,BG);
         Text(names[i],route[i].x-width/2,route[i].y+27,11,INK);
+        const char *checkpoint_state = reached ? "Reached" : "Upcoming";
+        float state_width = MeasureTextEx(font,checkpoint_state,12,0).x;
+        Text(checkpoint_state,route[i].x-state_width/2,route[i].y+49,12,reached ? ACCENT : MUTED);
     }
     DrawCircleV(parcel,20,(Color){47,65,42,255});
     DrawCircleV(parcel,12,ACCENT);
@@ -180,7 +189,7 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     Text("Completed route",351,472,12,MUTED);
     DrawCircle(491,480,4,(Color){71,89,104,255});
     Text("Remaining route",503,472,12,MUTED);
-    Text("Position derived from delivery progress",987,472,12,MUTED);
+    Text("Reached checkpoints use route distance",987,472,12,MUTED);
 
     Card((Rectangle){308,524,464,232});
     Text("TEMPERATURE",332,547,12,MUTED);
