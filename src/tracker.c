@@ -1,4 +1,5 @@
 #include "tracker.h"
+#include <math.h>
 
 static const float JOURNEY_SECONDS = 20.0f;
 
@@ -20,7 +21,7 @@ void TrackerPause(Tracker *tracker)
 
 void TrackerUpdate(Tracker *tracker, float delta_seconds)
 {
-    if (!tracker->running || delta_seconds <= 0.0f) return;
+    if (!tracker->running || !isfinite(delta_seconds) || delta_seconds <= 0.0f) return;
     tracker->elapsed_seconds += delta_seconds;
     if (tracker->elapsed_seconds >= JOURNEY_SECONDS) {
         tracker->elapsed_seconds = JOURNEY_SECONDS;
