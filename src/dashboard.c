@@ -1,7 +1,6 @@
 #include "dashboard.h"
 #include <math.h>
 #include <stddef.h>
-#include <errno.h>
 #include <stdio.h>
 
 static const Color BG = {12,17,23,255}, SURFACE = {20,28,36,255};
@@ -15,23 +14,8 @@ static char export_name[32];
 
 static void ExportEvents(const Sensors *sensors)
 {
-    export_status = -1;
-    for (unsigned int i = 1; i <= 999; ++i) {
-        char path[4096];
-        snprintf(export_name, sizeof(export_name), "events-%03u.csv", i);
-        int length = snprintf(path, sizeof(path), "%s%s", GetApplicationDirectory(), export_name);
-        if (length < 0 || (size_t)length >= sizeof(path)) return;
-        /* Exclusive creation preserves reports from earlier exports/runs. */
-        FILE *output = fopen(path, "wx");
-        if (!output) {
-            if (errno == EEXIST) continue;
-            return;
-        }
-        bool written = SensorsWriteCSV(sensors, output);
-        int closed = fclose(output);
-        if (written && closed == 0) export_status = 1;
-        return;
-    }
+    export_status = SensorsExportCSV(sensors, GetApplicationDirectory(),
+                                    export_name, sizeof(export_name)) ? 1 : -1;
 }
 
 void DashboardInit(void)
@@ -224,6 +208,8 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
         Text(SensorsEventName(event->kind),458,y,15,INK);
         Text(TextFormat("%.1f C",event->temperature_c),1130,y,14,MUTED);
     }
-    Text("Sensors monitor while paused; disconnection freezes readings.",308,1005,13,MUTED);
+    Text(TextFormat("Peak %.1f C  /  Heat exposure %.1f s  /  Unobserved %.1f s",
+         sensors->peak_temperature_c, sensors->heat_seconds, sensors->unobserved_seconds),
+         308,1005,13,MUTED);
     Text("DEMO DATA / NO PHYSICAL DEVICE",1022,1005,11,MUTED);
 }

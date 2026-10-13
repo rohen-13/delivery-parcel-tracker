@@ -12,6 +12,7 @@ An IoT monitoring prototype written in C and Raylib. The first version simulates
 - Live simulated temperature with heat and cooling controls and a 30 C demo alert.
 - Impact trigger and cumulative impact count. Reset clears delivery and sensor state.
 - Sensor monitoring continues while parcel movement is paused.
+- Session condition summary: peak temperature, observed seconds at or above 30 C and total unobserved time while disconnected. Reset clears the summary; cooling and reconnection preserve it. These are monitoring-session metrics, not shipping safety certification.
 - Simulated disconnect/reconnect controls, with frozen readings and stale-reading age while disconnected.
 - Timestamped sensor history: the latest four events are displayed, with up to 32 retained in memory.
 - Export retained sensor events to CSV using Export CSV or the E key, without overwriting earlier exports.
@@ -46,7 +47,7 @@ Physical hardware integration is not implemented. Temperature limits are fiction
 
 ## Event export
 
-Click **Export CSV (E)** or press E. Each export saves the currently retained events (at most 32), oldest first, with `elapsed_seconds`, `event` and `temperature_c` columns. Older events that have fallen out of the bounded history are not included. Export does not clear history and works while disconnected or paused.
+Click **Export CSV (E)** or press E. Each export saves the currently retained events (at most 32), oldest first, with `elapsed_seconds`, `event`, `temperature_c` and `impact_count` columns. Impact counts are snapshots taken at each event, not the total at export time. The fourth column is new; consumers of earlier three-column exports should read fields by header name. Existing saved reports are unchanged. Older events that have fallen out of the bounded history are not included. Export does not clear history and works while disconnected or paused.
 
 Files are numbered `events-001.csv` through `events-999.csv` beside the executable: `build/` for `make run`, or `build/Delivery Parcel Tracker.app/Contents/MacOS/` for the Mac app. Right-click the app and choose Show Package Contents to access its exports. The dashboard confirms success or reports a failure; check directory write access or whether all 999 names are occupied before retrying. Existing exports are never overwritten. Reset clears only live history, not saved CSV files.
 
@@ -63,3 +64,7 @@ See [the team plan](docs/team-plan.md) for file ownership, each teammate's branc
 GitHub repository: https://github.com/rohen-13/delivery-parcel-tracker
 
 Each group member maintains their own development journal. Store group screencasts in the shared OneDrive folder.
+
+## Automated checks
+
+`make test` checks delivery timing, sensor transitions, a combined delivery and monitoring scenario, and the actual CSV file-saving path. Export checks verify repeated saves, report preservation after reset, trailing-slash directories, invalid destinations and exhaustion of all 999 report names. Test reports are retained in isolated `.scratch/export-test.*` directories, not beside the app's real exports. These checks do not replace manually checking the dashboard button and E shortcut on both Macs.

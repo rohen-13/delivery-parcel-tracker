@@ -14,13 +14,15 @@ The module retains the latest 32 sensor events in chronological order. Events ca
 
 ## Integration contract for review
 
+The session summary retains `peak_temperature_c`, `heat_seconds` and `unobserved_seconds` until reset. Heat exposure counts only connected time at or above 30 C, integrating partial intervals when temperature crosses the threshold. Disconnects accumulate unobserved time instead of assuming a frozen reading remains accurate. Monitoring while delivery is paused still contributes to the summary. These metrics remain in memory and are displayed on the dashboard; the event CSV is not a session-summary export.
+
 Create a `Sensors` instance and call `SensorsReset` before use. Call `SensorsUpdate` once per frame with elapsed seconds. The module does not depend on `Tracker.running`, so readings remain active while parcel movement is paused.
 
 The dashboard can read `temperature_c`, `impact_count` and `SensorsHeatAlert`. Its heat, stop-heat and impact controls should call the corresponding functions once per button press. The application's Reset control should reset both the tracker and sensors.
 
 The application initialises and updates the module each frame. The dashboard displays temperature, heat alert, impact count, connection state, stale age and the latest four events. Sensor controls are disabled while disconnected. Reset clears both tracker and sensor state. Monitoring continues while parcel movement is paused.
 
-`SensorsWriteCSV` writes all retained events to a caller-owned stream, oldest first, with elapsed seconds, event name and Celsius reading columns. It flushes the output and reports write errors, but does not close the stream or change sensor state. The dashboard creates numbered CSV files exclusively beside the executable, checks both writing and closing, and shows success/failure feedback. Export includes at most 32 retained events, not a full-session archive.
+`SensorsWriteCSV` writes all retained events to a caller-owned stream, oldest first, with elapsed seconds, event name, Celsius reading and cumulative impact count columns. Each event snapshots the impact count when recorded, rather than using the current total at export time. It flushes the output and reports write errors, but does not close the stream or change sensor state. `SensorsExportCSV` creates numbered files exclusively beside the executable and checks both writing and closing; the dashboard shows success/failure feedback. Export includes at most 32 retained events, not a full-session archive.
 
 ## Verification
 

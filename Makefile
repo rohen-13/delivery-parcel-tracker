@@ -27,3 +27,8 @@ test:
 	./build/test-tracker
 	$(CC) $(CFLAGS) tests/test_sensors.c src/sensors.c -o build/test-sensors -lm
 	./build/test-sensors
+	$(CC) $(CFLAGS) tests/test_journey.c src/tracker.c src/sensors.c -o build/test-journey -lm
+	./build/test-journey
+	$(CC) $(CFLAGS) tests/test_export.c src/sensors.c -o build/test-export -lm
+	mkdir -p .scratch
+	./build/test-export "$$(mktemp -d .scratch/export-test.XXXXXX)"
