@@ -1,4 +1,6 @@
 #include "dashboard.h"
+#include "account.h"
+#include <string.h>
 #include <math.h>
 #include <stddef.h>
 #include <errno.h>
@@ -12,6 +14,22 @@ static Font font;
 static bool custom_font;
 static int export_status;
 static char export_name[32];
+
+static Account account;
+static bool profile_page, show_password, login_error;
+static char username[33] = "demo", password[65], edit_name[49];
+static int login_focus = 1, profile_focus = 0, profile_status;
+static float ui_scale = 1.0f;
+static Vector2 ui_offset;
+static void LoginPage(void);
+static void ProfilePage(Tracker *tracker, Sensors *sensors);
+
+bool DashboardSignedIn(void) { return account.signed_in; }
+void DashboardSetViewport(float scale, Vector2 offset)
+{
+    ui_scale = scale;
+    ui_offset = offset;
+}
 
 static void ExportEvents(const Sensors *sensors)
 {
@@ -69,6 +87,8 @@ static bool Button(Rectangle r, const char *label, bool enabled, bool primary)
 }
 void DashboardDraw(Tracker *tracker, Sensors *sensors)
 {
+    if (!account.signed_in) { LoginPage(); return; }
+    if (profile_page) { ProfilePage(tracker,sensors); return; }
     float progress = TrackerProgress(tracker);
     bool alert = SensorsHeatAlert(sensors);
     SetMouseCursor(MOUSE_CURSOR_DEFAULT);
@@ -127,6 +147,12 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     DrawRectangleRounded((Rectangle){1057,33,195,32},0.4f,8,(Color){31,45,34,255});
     DrawCircle(1074,49,4,ACCENT);
     Text("SIMULATION ACTIVE",1088,41,12,ACCENT);
+
+    if (Button((Rectangle){1057,73,195,32},"My profile",true,false)) {
+        profile_page=true;
+        strcpy(edit_name,account.display_name);
+        profile_status=0;
+    }
 
     /* Fictional street schematic; this is not a real geographic map. */
     Rectangle map={308,112,944,392};
@@ -235,4 +261,127 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     }
     Text("Sensors monitor while paused; disconnection freezes readings.",308,1005,13,MUTED);
     Text("DEMO DATA / NO PHYSICAL DEVICE",1022,1005,11,MUTED);
+}
+
+static void Input(Rectangle bounds, char *buffer, size_t capacity, int id,
+                  int *focus, bool secret, const char *hint)
+{
+    bool hover = CheckCollisionPointRec(GetMousePosition(), bounds);
+    if (hover) SetMouseCursor(MOUSE_CURSOR_IBEAM);
+    if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) *focus = id;
+    bool active = *focus == id;
+    if (active) {
+        int key;
+        while ((key = GetCharPressed()) != 0) {
+            size_t n = strlen(buffer);
+            if (key >= 32 && key <= 126 && n + 1 < capacity) {
+                buffer[n] = (char)key;
+                buffer[n+1] = '\0';
+            }
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
+            size_t n = strlen(buffer);
+            if (n) buffer[n-1] = '\0';
+        }
+    }
+    DrawRectangleRounded(bounds, 0.12f, 8, BG);
+    DrawRectangleRoundedLinesEx(bounds, 0.12f, 8, 1, active ? ACCENT : BORDER);
+    char masked[65];
+    size_t n = strlen(buffer);
+    if (n >= sizeof(masked)) n = sizeof(masked)-1;
+    memset(masked, '*', n);
+    masked[n] = '\0';
+    const char *value = buffer[0] ? (secret ? masked : buffer) : hint;
+    /* Clip long input so it cannot overlap the form or adjacent controls. */
+    int scissor_x = (int)(bounds.x * ui_scale + ui_offset.x);
+    int scissor_y = (int)(bounds.y * ui_scale + ui_offset.y);
+    BeginScissorMode(scissor_x, scissor_y, (int)(bounds.width * ui_scale), (int)(bounds.height * ui_scale));
+    float width = buffer[0] ? MeasureTextEx(font, value, 20, 0).x : 0;
+    float shift = buffer[0] && width > bounds.width-36 ? width-(bounds.width-36) : 0;
+    Text(value, bounds.x+16-shift, bounds.y+17, 20, buffer[0] ? INK : MUTED);
+    if (active && ((int)(GetTime()*2) % 2 == 0))
+        DrawRectangle((int)(bounds.x+18+width-shift), (int)bounds.y+15, 2, 25, ACCENT);
+    EndScissorMode();
+}
+
+static void LoginPage(void)
+{
+    ClearBackground(BG);
+    Text("PARCEL / OPS",80,65,24,ACCENT);
+    Text("DELIVERY MONITORING",80,180,13,MUTED);
+    Text("Every parcel.",80,220,52,INK);
+    Text("Every checkpoint.",80,282,52,INK);
+    Text("Monitor a shipment and its handling conditions",80,377,19,MUTED);
+    Text("from one place.",80,407,19,MUTED);
+    DrawLineEx((Vector2){95,575}, (Vector2){470,575}, 4, BORDER);
+    const char *stops[] = {"DEPOT", "HUB", "DELIVERED"};
+    for (int i=0; i<3; ++i) {
+        DrawCircle(95+i*187,575,9,i==0 ? ACCENT : MUTED);
+        Text(stops[i],78+i*187,604,12,MUTED);
+    }
+    Text("C + RAYLIB  /  SIMULATED IOT",80,920,13,MUTED);
+    Card((Rectangle){620,160,580,720});
+    Text("Welcome back",660,202,34,INK);
+    Text("Sign in to the parcel dashboard",660,253,18,MUTED);
+    Text("USERNAME",660,312,12,MUTED);
+    if (IsKeyPressed(KEY_TAB)) login_focus = login_focus == 0 ? 1 : 0;
+    Input((Rectangle){660,338,500,60}, username, sizeof(username), 0, &login_focus, false, "Username");
+    Text("PASSWORD",660,426,12,MUTED);
+    Input((Rectangle){660,452,500,60}, password, sizeof(password), 1, &login_focus, !show_password, "Password");
+    if (Button((Rectangle){990,526,170,36},show_password ? "Hide password" : "Show password",true,false)) show_password=!show_password;
+    if (login_error) Text("Use the demo username and password below.",660,583,17,AMBER);
+    if (Button((Rectangle){660,622,500,48},"Sign in",true,true) || IsKeyPressed(KEY_ENTER)) {
+        if (AccountSignIn(&account,username,password)) {
+            memset(password,0,sizeof(password));
+            show_password=false;
+            login_error=false;
+            profile_page=false;
+        } else login_error=true;
+    }
+    Text("DEMO ACCOUNT",660,714,12,ACCENT);
+    Text("Username: demo   /   Password: parcel123",660,742,18,INK);
+    Text("Local prototype login. No online account or secure",660,790,16,MUTED);
+    Text("authentication service is connected.",660,815,16,MUTED);
+}
+
+static void ProfilePage(Tracker *tracker, Sensors *sensors)
+{
+    ClearBackground(BG);
+    Text("PARCEL / OPS",80,65,24,ACCENT);
+    if (Button((Rectangle){920,55,280,44},"Back to dashboard",true,false)) profile_page=false;
+    Text("My profile",160,170,42,INK);
+    Text("Your operator details for this session",160,225,19,MUTED);
+    Card((Rectangle){160,290,960,560});
+    DrawCircle(230,367,32,ACCENT);
+    Text("P",218,345,36,BG);
+    float name_width = MeasureTextEx(font,account.display_name,28,0).x;
+    float name_size = name_width > 790 ? 28*790/name_width : 28;
+    Text(account.display_name,290,333,name_size,INK);
+    Text("Parcel operator  /  Demo account",290,377,16,MUTED);
+    DrawLine(200,435,1080,435,BORDER);
+    Text("DISPLAY NAME",200,470,12,MUTED);
+    Input((Rectangle){200,500,560,60},edit_name,sizeof(edit_name),0,&profile_focus,false,"Your display name");
+    if (Button((Rectangle){790,506,290,48},"Save changes",true,true) || IsKeyPressed(KEY_ENTER))
+        profile_status=AccountSetDisplayName(&account,edit_name) ? 1 : -1;
+    if (profile_status) Text(profile_status>0 ? "Display name saved for this session." : "Enter a name using 1 to 48 printable characters.",200,585,17,profile_status>0 ? GOOD : AMBER);
+    Text("ACCOUNT",200,646,12,MUTED);
+    Text("demo",200,675,21,INK);
+    Text("ASSIGNED SHIPMENT",650,646,12,MUTED);
+    Text("PKG-001",650,675,21,INK);
+    Text("Profile edits last until sign-out or closing the app.",200,742,17,MUTED);
+    Text("Signing out clears the current delivery and sensor session.",200,775,17,MUTED);
+    if (Button((Rectangle){160,888,240,48},"Sign out",true,false)) {
+        AccountSignOut(&account);
+        TrackerReset(tracker);
+        SensorsReset(sensors);
+        memset(edit_name,0,sizeof(edit_name));
+        memset(password,0,sizeof(password));
+        profile_page=false;
+        login_focus=0;
+        profile_status=0;
+        export_status=0;
+        show_password=false;
+        login_error=false;
+    }
+    Text("DEMO ACCOUNT  /  NO PASSWORDS SAVED",650,908,13,MUTED);
 }

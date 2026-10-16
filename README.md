@@ -63,3 +63,13 @@ See [the team plan](docs/team-plan.md) for file ownership, each teammate's branc
 GitHub repository: https://github.com/rohen-13/delivery-parcel-tracker
 
 Each group member maintains their own development journal. Store group screencasts in the shared OneDrive folder.
+
+## Demo login and user profile
+
+The app opens at a local demonstration login screen. Use username **demo** and password **parcel123**. Enter the password and click **Sign in** (or press Enter); Tab switches between the username and password fields. The password is masked, with a Show/Hide control. Incorrect credentials display an error and keep the dashboard closed.
+
+From the dashboard, choose **My profile** to view the demo account and assigned shipment. Edit the display name and click **Save changes**. Names must contain 1–48 printable ASCII characters and cannot contain only spaces. Changes remain in memory for the current session. **Back to dashboard** preserves the session; **Sign out** clears the profile, password input, current delivery and sensor state and returns to login. Previously exported CSV files remain on disk. Monitoring continues while viewing the profile, but does not advance before login.
+
+This demonstrates the navigation and account interface only. The shared demo credentials are embedded in the prototype; there is no server, secure authentication, registration, password recovery or persistent user database. Do not use real account passwords.
+
+The window can be resized; the complete dashboard scales to fit with matching mouse input. Press **F11** to toggle borderless full screen. Press Escape to close the app.
