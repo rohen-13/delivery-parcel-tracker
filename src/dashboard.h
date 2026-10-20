@@ -8,5 +8,8 @@
 void DashboardDraw(Tracker *tracker, Sensors *sensors);
 void DashboardInit(void);
 void DashboardClose(void);
+bool DashboardSignedIn(void);
+void DashboardObserveSensors(const Sensors *sensors);
+void DashboardSetViewport(float scale, Vector2 offset);
 
 #endif

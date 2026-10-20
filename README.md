@@ -13,7 +13,7 @@ An IoT monitoring prototype written in C and Raylib. The first version simulates
 - Impact trigger and cumulative impact count. Reset clears delivery and sensor state.
 - Sensor monitoring continues while parcel movement is paused.
 - Simulated disconnect/reconnect controls, with frozen readings and stale-reading age while disconnected.
-- Timestamped sensor history: the latest four events are displayed, with up to 32 retained in memory.
+- Timestamped sensor history: the latest three events are displayed, with up to 32 retained in memory.
 - Export retained sensor events to CSV using Export CSV or the E key, without overwriting earlier exports.
 
 ## Run on macOS
@@ -63,3 +63,20 @@ See [the team plan](docs/team-plan.md) for file ownership, each teammate's branc
 GitHub repository: https://github.com/rohen-13/delivery-parcel-tracker
 
 Each group member maintains their own development journal. Store group screencasts in the shared OneDrive folder.
+
+## Demo login and user profile
+
+The app opens at a local demonstration login screen. Use username **demo** and password **parcel123**. Enter the password and click **Sign in** (or press Enter); Tab switches between the username and password fields. The password is masked, with a Show/Hide control. Incorrect credentials display an error and keep the dashboard closed.
+
+From the dashboard, choose **My profile** to view the demo account and assigned shipment. Edit the display name and click **Save changes**. Names must contain 1–48 printable ASCII characters and cannot contain only spaces. Changes remain in memory for the current session. **Back to dashboard** preserves the session; **Sign out** clears the profile, password input, current delivery and sensor state and returns to login. Previously exported CSV files remain on disk. Monitoring continues while viewing the profile, but does not advance before login.
+
+This demonstrates the navigation and account interface only. The shared demo credentials are embedded in the prototype; there is no server, secure authentication, registration, password recovery or persistent user database. Do not use real account passwords.
+
+The window can be resized; the complete dashboard scales to fit with matching mouse input. Press **F11** to toggle borderless full screen. Press Escape to close the app.
+
+
+## Temperature history graph
+
+The dashboard plots actual simulated telemetry from the last 60 seconds against a fixed 20–40 C scale. The amber line marks the 30 C demonstration threshold. Regular readings are sampled at most once per second; connection changes are recorded immediately. Disconnects and gaps over two seconds break the plotted line so old or missing readings do not appear as continuous fresh data.
+
+History keeps updating while delivery is paused or the profile is open. Reset all and sign-out clear the graph. Samples stay in memory for this session, with a maximum of 128 points. The event panel displays the latest three sensor events; CSV export still includes up to 32 retained sensor events and does not export graph samples.
