@@ -6,9 +6,12 @@ RAYLIB_LIBS = $(shell pkg-config --libs raylib)
 .PHONY: all run app test clean
 all: build/parcel-tracker
 
-build/parcel-tracker: src/main.c src/dashboard.c src/tracker.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/dispatch.h src/dispatch_ui.h src/dashboard.h src/tracker.h src/sensors.h
+APP_SOURCES = src/main.c src/dashboard.c src/tracker.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
+APP_HEADERS = src/dispatch.h src/dispatch_ui.h src/dashboard.h src/tracker.h src/sensors.h src/account.h src/temperature_history.h
+
+build/parcel-tracker: $(APP_SOURCES) $(APP_HEADERS)
 	mkdir -p build
-	$(CC) $(CFLAGS) $(RAYLIB_CFLAGS) src/main.c src/dashboard.c src/tracker.c src/sensors.c src/dispatch.c src/dispatch_ui.c -o $@ $(RAYLIB_LIBS) -lm -pthread
+	$(CC) $(CFLAGS) $(RAYLIB_CFLAGS) $(APP_SOURCES) -o $@ $(RAYLIB_LIBS) -lm -pthread
 
 run: all
 	./build/parcel-tracker
@@ -34,3 +37,7 @@ test:
 	$(CC) $(CFLAGS) tests/test_export.c src/sensors.c -o build/test-export -lm
 	mkdir -p .scratch
 	./build/test-export "$$(mktemp -d .scratch/export-test.XXXXXX)"
+	$(CC) $(CFLAGS) tests/test_account.c src/account.c -o build/test-account
+	./build/test-account
+	$(CC) $(CFLAGS) tests/test_temperature_history.c src/temperature_history.c -o build/test-temperature-history
+	./build/test-temperature-history

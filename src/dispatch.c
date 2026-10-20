@@ -12,10 +12,6 @@
 #include <unistd.h>
 extern char **environ;
 const GeoPoint DISPATCH_DEPOT = {52.2595,-7.1100};
-bool DispatchLogin(const char *user, const char *password)
-{
-    return user && password && strcmp(user,"demo")==0 && strcmp(password,"parcel-demo")==0;
-}
 void DispatchSeed(Package p[5])
 {
     const Package seed[5] = {
@@ -26,6 +22,15 @@ void DispatchSeed(Package p[5])
         {"PKG-005","City Library",{52.2584,-7.1147},true,false}
     };
     memcpy(p,seed,sizeof(seed));
+}
+bool DispatchDeliver(Package p[5], int index, GeoPoint *position)
+{
+    if(!p || !position || index<0 || index>=5 || !p[index].included || p[index].delivered)
+        return false;
+    *position=p[index].point;
+    p[index].delivered=true;
+    p[index].included=false;
+    return true;
 }
 static void Search(const double d[6][6], int n, int from, unsigned used,
                    int depth, double sum, int path[5], int best[5], double *minimum)
@@ -244,8 +249,15 @@ bool DispatchFetch(const char *url,const char *json,unsigned char *data,size_t c
 }
 bool DispatchPlan(const Package p[5],DeliveryRoute *r)
 {
+    return DispatchPlanFrom(p,DISPATCH_DEPOT,r);
+}
+bool DispatchPlanFrom(const Package p[5],GeoPoint position,DeliveryRoute *r)
+{
+    if(!r)return false;
     *r=(DeliveryRoute){0};
-    int index[5],count=0; GeoPoint stops[6]={DISPATCH_DEPOT};
+    snprintf(r->message,sizeof(r->message),"Invalid driver or package coordinates.");
+    if(!p || !isfinite(position.lat) || !isfinite(position.lon) || fabs(position.lat)>85 || fabs(position.lon)>180)return false;
+    int index[5],count=0; GeoPoint stops[6]={position};
     for(int i=0;i<5;++i) if(p[i].included && !p[i].delivered) {
         if(!isfinite(p[i].point.lat)||!isfinite(p[i].point.lon)||fabs(p[i].point.lat)>85||fabs(p[i].point.lon)>180) return false;
         index[count]=i;stops[++count]=p[i].point;
@@ -269,7 +281,7 @@ bool DispatchPlan(const Package p[5],DeliveryRoute *r)
         sleep(1);
         strcpy(locations,"[");
         for(int i=0;i<=count;++i) {
-            GeoPoint point=i?stops[order[i-1]+1]:DISPATCH_DEPOT;
+            GeoPoint point=i?stops[order[i-1]+1]:position;
             snprintf(part,sizeof(part),"%s{\"lat\":%.6f,\"lon\":%.6f,\"type\":\"break\"}",i?",":"",point.lat,point.lon);
             strcat(locations,part);
         }

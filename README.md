@@ -6,17 +6,17 @@ An IoT monitoring prototype written in C and Raylib. The first version simulates
 
 ### Dispatch demo
 
-The app opens with a local demo sign-in: username `demo`, password `parcel-demo`. These are public demonstration values, not secrets or real authentication. Do not enter personal passwords. There is no account server, password storage or access-control guarantee.
+The app opens with the shared local demo sign-in: username `demo`, password `parcel123`. The same session opens dispatch, profile and sensor monitoring. These are public demonstration values, not real authentication; do not enter personal passwords.
 
-After sign-in, five fictional package deliveries at Waterford landmarks appear beside a fixed-area OpenStreetMap view. Select a row, toggle its checkbox to include it, or mark it delivered. Delivered packages are excluded from routing. Reset demo packages restores the sample list. Package changes and login sessions are memory-only. No live GPS, address search, arbitrary stop entry or per-package sensor feeds are implemented.
+After sign-in, five fictional package deliveries at Waterford landmarks appear beside a fixed-area OpenStreetMap view. Select a row or map marker and toggle its checkbox to include it. A planned route labels each row with its delivery order and selects the next stop. **Deliver next route stop** records that delivery and moves the blue driver marker there. Delivered packages are excluded from subsequent routes. **Reset delivery round** restores packages and the driver to the depot. State stays in memory; there is no live GPS, address search, arbitrary stop entry or per-package sensor feed.
 
 Choose **Load OSM map (L)** to fetch just the 12 tiles covering the visible area. Tiles are cached beside the executable in `map-cache/` for seven days. Attribution remains on the map and links to OpenStreetMap copyright information. No bulk/offline-region downloads are performed. An internet connection is needed on first load; missing tiles show an empty grid and can be retried.
 
-Choose **Plan distance route (P)** to request Valhalla's automobile distance matrix with `shortest: true`, exhaustively compare all orders of the included undelivered stops (maximum 120 permutations), then request the road geometry for the selected order. The journey starts at the fixed depot and ends at the last stop, with no return leg. Distances are directional, so one-way roads matter. This selects the minimum stop order against the service's reported distance matrix, not a guarantee of a globally shortest route under every road-engine approximation. Time is an estimate, not live traffic. Changing stops invalidates the old route. Replanning always starts from the depot, not a live vehicle location.
+Choose **Plan distance route (P)** to request Valhalla's automobile distance matrix with `shortest: true`, exhaustively compare all orders of the included undelivered stops (maximum 120 permutations), then request the road geometry for the selected order. The journey starts at the driver marker and ends at the last stop, with no return leg. Initially the driver is at the depot; after completing a delivery, replan from that stop. Distances are directional, so one-way roads matter. This selects the minimum stop order against the service's reported distance matrix, not a guarantee of a globally shortest route under every road-engine approximation. Time is an estimate, not live traffic. Changing stops or recording a delivery invalidates the old route. The driver position is manually simulated, not live vehicle location.
 
 Requests run in a background thread with HTTPS verification, timeouts, a response-size limit, an identifying User-Agent and a five-second UI request cooldown. Existing macOS `/usr/bin/curl` is executed with direct arguments, never a shell; no extra C package is installed. Public demo services have no availability guarantee and are unsuitable for production workloads. Only the fictional landmark coordinates are sent to Valhalla; tile coordinates and ordinary request metadata go to OpenStreetMap. No device location is collected.
 
-Use Up/Down to select a package, Space to include/exclude it, and L/P for map/routing. **Sensor monitoring** opens the original single-parcel simulation, separate from dispatch packages; **Dispatch map (M)** returns. Signing out returns to the local login screen but does not clear fictional package state.
+Use Up/Down to select a package, Space to include/exclude it, and L/P for map/routing. **Sensor monitoring** opens the original single-parcel simulation, separate from dispatch packages; **Dispatch map (M)** returns. **My profile / Sign out** opens the shared profile. Signing out clears packages, routes, driver position and the sensor session. The map and its pointer controls scale with the window.
 
 Service references: [Valhalla routing API](https://valhalla.github.io/valhalla/api/route/api-reference/), [Valhalla matrix API](https://valhalla.github.io/valhalla/api/matrix/), [public demo service](https://github.com/valhalla/valhalla), [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
 
@@ -32,7 +32,7 @@ Service references: [Valhalla routing API](https://valhalla.github.io/valhalla/a
 - Sensor monitoring continues while parcel movement is paused.
 - Session condition summary: peak temperature, observed seconds at or above 30 C and total unobserved time while disconnected. Reset clears the summary; cooling and reconnection preserve it. These are monitoring-session metrics, not shipping safety certification.
 - Simulated disconnect/reconnect controls, with frozen readings and stale-reading age while disconnected.
-- Timestamped sensor history: the latest four events are displayed, with up to 32 retained in memory.
+- Timestamped sensor history: the latest three events are displayed, with up to 32 retained in memory.
 - Export retained sensor events to CSV using Export CSV or the E key, without overwriting earlier exports.
 
 ## Run on macOS
@@ -86,3 +86,19 @@ Each group member maintains their own development journal. Store group screencas
 ## Automated checks
 
 `make test` checks delivery timing, sensor transitions, a combined delivery and monitoring scenario, and the actual CSV file-saving path. Export checks verify repeated saves, report preservation after reset, trailing-slash directories, invalid destinations and exhaustion of all 999 report names. Test reports are retained in isolated `.scratch/export-test.*` directories, not beside the app's real exports. These checks do not replace manually checking the dashboard button and E shortcut on both Macs.
+## Demo login and user profile
+
+The app opens at a local demonstration login screen. Use username **demo** and password **parcel123**. Enter the password and click **Sign in** (or press Enter); Tab switches between the username and password fields. The password is masked, with a Show/Hide control. Incorrect credentials display an error and keep the dashboard closed.
+
+From the dashboard, choose **My profile** to view the demo account and assigned shipment. Edit the display name and click **Save changes**. Names must contain 1–48 printable ASCII characters and cannot contain only spaces. Changes remain in memory for the current session. **Back to dashboard** preserves the session; **Sign out** clears the profile, password input, current delivery and sensor state and returns to login. Previously exported CSV files remain on disk. Monitoring continues while viewing the profile, but does not advance before login.
+
+This demonstrates the navigation and account interface only. The shared demo credentials are embedded in the prototype; there is no server, secure authentication, registration, password recovery or persistent user database. Do not use real account passwords.
+
+The window can be resized; the complete dashboard scales to fit with matching mouse input. Press **F11** to toggle borderless full screen. Press Escape to close the app.
+
+
+## Temperature history graph
+
+The dashboard plots actual simulated telemetry from the last 60 seconds against a fixed 20–40 C scale. The amber line marks the 30 C demonstration threshold. Regular readings are sampled at most once per second; connection changes are recorded immediately. Disconnects and gaps over two seconds break the plotted line so old or missing readings do not appear as continuous fresh data.
+
+History keeps updating while delivery is paused or the profile is open. Reset all and sign-out clear the graph. Samples stay in memory for this session, with a maximum of 128 points. The event panel displays the latest three sensor events; CSV export still includes up to 32 retained sensor events and does not export graph samples.

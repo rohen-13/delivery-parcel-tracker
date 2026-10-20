@@ -5,9 +5,6 @@
 #include <string.h>
 int main(int argc,char **argv)
 {
-    assert(DispatchLogin("demo", "parcel-demo"));
-    assert(!DispatchLogin("demo", "wrong"));
-    assert(!DispatchLogin(NULL, "parcel-demo"));
     double d[6][6] = {{0,9,1},{2,0,8},{8,1,0}};
     int order[5]; double km;
     assert(DispatchBestOrder((const double (*)[6])d, 2, order, &km));
@@ -35,6 +32,18 @@ int main(int argc,char **argv)
     assert(!r.ready && r.point_count==0);
     Package p[5]; DispatchSeed(p);
     assert(p[0].included && !p[0].delivered && strlen(p[0].id)>0);
+    GeoPoint position=DISPATCH_DEPOT;
+    assert(!DispatchDeliver(p,-1,&position));
+    assert(!DispatchDeliver(p,5,&position));
+    p[1].included=false;
+    assert(!DispatchDeliver(p,1,&position));
+    assert(position.lat==DISPATCH_DEPOT.lat);
+    assert(DispatchDeliver(p,0,&position));
+    assert(p[0].delivered && !p[0].included);
+    assert(position.lat==p[0].point.lat && position.lon==p[0].point.lon);
+    assert(!DispatchDeliver(p,0,&position));
+    assert(!DispatchPlanFrom(p,(GeoPoint){NAN,0},&r));
+    assert(!r.ready && r.message[0]);
     for(int i=0;i<5;++i)p[i].delivered=true;
     assert(!DispatchPlan(p,&r) && !r.ready);
     DispatchSeed(p);
@@ -45,5 +54,5 @@ int main(int argc,char **argv)
         for(int i=0;i<r.count;++i)printf(" %d",r.order[i]+1);
         puts("");
     }
-    puts("Dispatch checks passed: demo login, asymmetric distance optimisation and response validation.");
+    puts("Dispatch checks passed: delivery position, asymmetric distance optimisation and response validation.");
 }
