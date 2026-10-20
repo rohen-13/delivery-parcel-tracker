@@ -1,5 +1,6 @@
 #include "dashboard.h"
 #include "account.h"
+#include "temperature_history.h"
 #include <string.h>
 #include <math.h>
 #include <stddef.h>
@@ -16,6 +17,7 @@ static int export_status;
 static char export_name[32];
 
 static Account account;
+static TemperatureHistory temperature_history;
 static bool profile_page, show_password, login_error;
 static char username[33] = "demo", password[65], edit_name[49];
 static int login_focus = 1, profile_focus = 0, profile_status;
@@ -23,6 +25,12 @@ static float ui_scale = 1.0f;
 static Vector2 ui_offset;
 static void LoginPage(void);
 static void ProfilePage(Tracker *tracker, Sensors *sensors);
+
+void DashboardObserveSensors(const Sensors *sensors)
+{
+    TemperatureHistoryObserve(&temperature_history,sensors->seconds,
+                              sensors->temperature_c,sensors->connected);
+}
 
 bool DashboardSignedIn(void) { return account.signed_in; }
 void DashboardSetViewport(float scale, Vector2 offset)
@@ -85,6 +93,39 @@ static bool Button(Rectangle r, const char *label, bool enabled, bool primary)
     if (hover) SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
+static void TemperatureGraph(const Sensors *sensors)
+{
+    Card((Rectangle){308,776,464,208});
+    Text("TEMPERATURE HISTORY",332,795,12,MUTED);
+    Text(sensors->connected ? "Last 60 s" : "Disconnected / gaps",606,795,12,
+         sensors->connected ? MUTED : AMBER);
+    const Rectangle plot = {367,837,376,100};
+    for (int i=0; i<3; ++i) {
+        float y = plot.y+i*plot.height/2;
+        Color color = i==1 ? AMBER : BORDER;
+        DrawLineEx((Vector2){plot.x,y},(Vector2){plot.x+plot.width,y},1,color);
+        Text(TextFormat("%d C",40-i*10),332,y-6,11,i==1 ? AMBER : MUTED);
+    }
+    Text("60 s ago",367,949,11,MUTED);
+    Text("30 C demo threshold",474,949,11,AMBER);
+    Text("Now",720,949,11,MUTED);
+    if (!temperature_history.count) {
+        Text("Waiting for sensor readings",402,876,15,MUTED);
+        return;
+    }
+    Vector2 previous = {0};
+    for (unsigned int i=0; i<temperature_history.count; ++i) {
+        const TemperatureSample *sample = &temperature_history.samples[i];
+        float age = (float)(sensors->seconds-sample->seconds);
+        Vector2 point = {plot.x+plot.width*(1-age/60.0f),
+                         plot.y+plot.height*(1-fminf(fmaxf((sample->temperature_c-20)/20,0),1))};
+        if (i && TemperatureHistoryCanJoin(&temperature_history.samples[i-1],sample))
+            DrawLineEx(previous,point,2,ACCENT);
+        if (sample->fresh) DrawCircleV(point,2,sample->temperature_c>=30 ? AMBER : ACCENT);
+        previous=point;
+    }
+}
+
 void DashboardDraw(Tracker *tracker, Sensors *sensors)
 {
     if (!account.signed_in) { LoginPage(); return; }
@@ -125,6 +166,7 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     if (Button((Rectangle){144,598,108,44},"Reset all",true,false)) {
         TrackerReset(tracker);
         SensorsReset(sensors);
+        TemperatureHistoryReset(&temperature_history);
     }
     if (Button((Rectangle){28,660,224,40},sensors->connected ? "Disconnect tracker" : "Reconnect tracker",true,false))
         SensorsSetConnected(sensors,!sensors->connected);
@@ -246,18 +288,18 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
     if (Button((Rectangle){816,702,170,36},"Trigger impact",sensors->connected,false)) SensorsTriggerImpact(sensors);
     Text("Reset all clears the count",1000,714,12,MUTED);
 
-    Card((Rectangle){308,776,944,208});
-    Text("RECENT SENSOR EVENTS",332,796,12,MUTED);
-    if (Button((Rectangle){700,784,170,36},"Export CSV (E)",true,false) || IsKeyPressed(KEY_E))
+    TemperatureGraph(sensors);
+    Card((Rectangle){792,776,460,208});
+    Text("RECENT EVENTS",816,796,12,MUTED);
+    if (Button((Rectangle){1050,784,178,36},"Export CSV (E)",true,false) || IsKeyPressed(KEY_E))
         ExportEvents(sensors);
-    Text("Elapsed simulation time / latest 4 / capacity 32",906,796,11,MUTED);
-    unsigned int first = sensors->event_count > 4 ? sensors->event_count - 4 : 0;
+    Text("Latest 3 / 32 retained for export",816,825,11,MUTED);
+    unsigned int first = sensors->event_count > 3 ? sensors->event_count - 3 : 0;
     for (unsigned int i=first; i<sensors->event_count; ++i) {
         const SensorEvent *event = &sensors->events[i];
-        float y = 831 + (i-first)*34;
-        Text(TextFormat("%.1f s",event->seconds),332,y,14,MUTED);
-        Text(SensorsEventName(event->kind),458,y,15,INK);
-        Text(TextFormat("%.1f C",event->temperature_c),1130,y,14,MUTED);
+        float y = 854 + (i-first)*37;
+        Text(TextFormat("%.1f s",event->seconds),816,y,12,MUTED);
+        Text(SensorsEventName(event->kind),900,y,14,INK);
     }
     Text("Sensors monitor while paused; disconnection freezes readings.",308,1005,13,MUTED);
     Text("DEMO DATA / NO PHYSICAL DEVICE",1022,1005,11,MUTED);
@@ -374,6 +416,7 @@ static void ProfilePage(Tracker *tracker, Sensors *sensors)
         AccountSignOut(&account);
         TrackerReset(tracker);
         SensorsReset(sensors);
+        TemperatureHistoryReset(&temperature_history);
         memset(edit_name,0,sizeof(edit_name));
         memset(password,0,sizeof(password));
         profile_page=false;

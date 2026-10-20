@@ -20,6 +20,7 @@ int main(void)
         if (DashboardSignedIn()) {
             TrackerUpdate(&tracker, delta_seconds);
             SensorsUpdate(&sensors, delta_seconds);
+            DashboardObserveSensors(&sensors);
         }
         float scale = fminf(GetScreenWidth()/1280.0f, GetScreenHeight()/1040.0f);
         Vector2 offset = {(GetScreenWidth()-1280*scale)/2,
