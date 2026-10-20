@@ -4,7 +4,6 @@
 #include <string.h>
 #include <math.h>
 #include <stddef.h>
-#include <errno.h>
 #include <stdio.h>
 
 static const Color BG = {12,17,23,255}, SURFACE = {20,28,36,255};
@@ -33,6 +32,14 @@ void DashboardObserveSensors(const Sensors *sensors)
 }
 
 bool DashboardSignedIn(void) { return account.signed_in; }
+bool DashboardAccountPage(void) { return !account.signed_in || profile_page; }
+void DashboardOpenProfile(void)
+{
+    if (!account.signed_in) return;
+    profile_page = true;
+    strcpy(edit_name, account.display_name);
+    profile_status = 0;
+}
 void DashboardSetViewport(float scale, Vector2 offset)
 {
     ui_scale = scale;
@@ -41,23 +48,8 @@ void DashboardSetViewport(float scale, Vector2 offset)
 
 static void ExportEvents(const Sensors *sensors)
 {
-    export_status = -1;
-    for (unsigned int i = 1; i <= 999; ++i) {
-        char path[4096];
-        snprintf(export_name, sizeof(export_name), "events-%03u.csv", i);
-        int length = snprintf(path, sizeof(path), "%s%s", GetApplicationDirectory(), export_name);
-        if (length < 0 || (size_t)length >= sizeof(path)) return;
-        /* Exclusive creation preserves reports from earlier exports/runs. */
-        FILE *output = fopen(path, "wx");
-        if (!output) {
-            if (errno == EEXIST) continue;
-            return;
-        }
-        bool written = SensorsWriteCSV(sensors, output);
-        int closed = fclose(output);
-        if (written && closed == 0) export_status = 1;
-        return;
-    }
+    export_status = SensorsExportCSV(sensors, GetApplicationDirectory(),
+                                    export_name, sizeof(export_name)) ? 1 : -1;
 }
 
 void DashboardInit(void)
@@ -301,7 +293,9 @@ void DashboardDraw(Tracker *tracker, Sensors *sensors)
         Text(TextFormat("%.1f s",event->seconds),816,y,12,MUTED);
         Text(SensorsEventName(event->kind),900,y,14,INK);
     }
-    Text("Sensors monitor while paused; disconnection freezes readings.",308,1005,13,MUTED);
+    Text(TextFormat("Peak %.1f C  /  Heat exposure %.1f s  /  Unobserved %.1f s",
+         sensors->peak_temperature_c, sensors->heat_seconds, sensors->unobserved_seconds),
+         308,1005,13,MUTED);
     Text("DEMO DATA / NO PHYSICAL DEVICE",1022,1005,11,MUTED);
 }
 
@@ -390,7 +384,7 @@ static void ProfilePage(Tracker *tracker, Sensors *sensors)
 {
     ClearBackground(BG);
     Text("PARCEL / OPS",80,65,24,ACCENT);
-    if (Button((Rectangle){920,55,280,44},"Back to dashboard",true,false)) profile_page=false;
+    if (Button((Rectangle){920,55,280,44},"Back to workspace",true,false)) profile_page=false;
     Text("My profile",160,170,42,INK);
     Text("Your operator details for this session",160,225,19,MUTED);
     Card((Rectangle){160,290,960,560});
@@ -408,10 +402,10 @@ static void ProfilePage(Tracker *tracker, Sensors *sensors)
     if (profile_status) Text(profile_status>0 ? "Display name saved for this session." : "Enter a name using 1 to 48 printable characters.",200,585,17,profile_status>0 ? GOOD : AMBER);
     Text("ACCOUNT",200,646,12,MUTED);
     Text("demo",200,675,21,INK);
-    Text("ASSIGNED SHIPMENT",650,646,12,MUTED);
-    Text("PKG-001",650,675,21,INK);
+    Text("WORKSPACE",650,646,12,MUTED);
+    Text("Dispatch + sensor demo",650,675,21,INK);
     Text("Profile edits last until sign-out or closing the app.",200,742,17,MUTED);
-    Text("Signing out clears the current delivery and sensor session.",200,775,17,MUTED);
+    Text("Signing out clears packages, routes and the sensor session.",200,775,17,MUTED);
     if (Button((Rectangle){160,888,240,48},"Sign out",true,false)) {
         AccountSignOut(&account);
         TrackerReset(tracker);
