@@ -4,6 +4,24 @@ An IoT monitoring prototype written in C and Raylib. The first version simulates
 
 ## Current features
 
+### Dispatch demo
+
+The app opens with a local demo sign-in: username `demo`, password `parcel-demo`. These are public demonstration values, not secrets or real authentication. Do not enter personal passwords. There is no account server, password storage or access-control guarantee.
+
+After sign-in, five fictional package deliveries at Waterford landmarks appear beside a fixed-area OpenStreetMap view. Select a row, toggle its checkbox to include it, or mark it delivered. Delivered packages are excluded from routing. Reset demo packages restores the sample list. Package changes and login sessions are memory-only. No live GPS, address search, arbitrary stop entry or per-package sensor feeds are implemented.
+
+Choose **Load OSM map (L)** to fetch just the 12 tiles covering the visible area. Tiles are cached beside the executable in `map-cache/` for seven days. Attribution remains on the map and links to OpenStreetMap copyright information. No bulk/offline-region downloads are performed. An internet connection is needed on first load; missing tiles show an empty grid and can be retried.
+
+Choose **Plan distance route (P)** to request Valhalla's automobile distance matrix with `shortest: true`, exhaustively compare all orders of the included undelivered stops (maximum 120 permutations), then request the road geometry for the selected order. The journey starts at the fixed depot and ends at the last stop, with no return leg. Distances are directional, so one-way roads matter. This selects the minimum stop order against the service's reported distance matrix, not a guarantee of a globally shortest route under every road-engine approximation. Time is an estimate, not live traffic. Changing stops invalidates the old route. Replanning always starts from the depot, not a live vehicle location.
+
+Requests run in a background thread with HTTPS verification, timeouts, a response-size limit, an identifying User-Agent and a five-second UI request cooldown. Existing macOS `/usr/bin/curl` is executed with direct arguments, never a shell; no extra C package is installed. Public demo services have no availability guarantee and are unsuitable for production workloads. Only the fictional landmark coordinates are sent to Valhalla; tile coordinates and ordinary request metadata go to OpenStreetMap. No device location is collected.
+
+Use Up/Down to select a package, Space to include/exclude it, and L/P for map/routing. **Sensor monitoring** opens the original single-parcel simulation, separate from dispatch packages; **Dispatch map (M)** returns. Signing out returns to the local login screen but does not clear fictional package state.
+
+Service references: [Valhalla routing API](https://valhalla.github.io/valhalla/api/route/api-reference/), [Valhalla matrix API](https://valhalla.github.io/valhalla/api/matrix/), [public demo service](https://github.com/valhalla/valhalla), [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+
+### Original monitoring simulation
+
 - A drawn delivery route and animated parcel marker.
 - Parcel ID, delivery status and progress.
 - Start/resume, pause and reset controls.
