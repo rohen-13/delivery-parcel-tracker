@@ -6,8 +6,8 @@ RAYLIB_LIBS = $(shell pkg-config --libs raylib)
 .PHONY: all run app test clean
 all: build/parcel-tracker
 
-APP_SOURCES = src/main.c src/dashboard.c src/tracker.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
-APP_HEADERS = src/dispatch.h src/dispatch_ui.h src/dashboard.h src/tracker.h src/sensors.h src/account.h src/temperature_history.h
+APP_SOURCES = src/main.c src/dashboard.c src/round.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
+APP_HEADERS = src/round.h src/dispatch.h src/dispatch_ui.h src/dashboard.h src/sensors.h src/account.h src/temperature_history.h
 
 build/parcel-tracker: $(APP_SOURCES) $(APP_HEADERS)
 	mkdir -p build
@@ -26,6 +26,9 @@ clean:
 
 test:
 	mkdir -p build
+	$(CC) $(CFLAGS) tests/test_round.c src/round.c src/dispatch.c src/sensors.c src/temperature_history.c -o build/test-round -lm
+	mkdir -p .scratch
+	./build/test-round "$$(mktemp -d .scratch/round-test.XXXXXX)"
 	$(CC) $(CFLAGS) tests/test_dispatch.c src/dispatch.c -o build/test-dispatch -lm
 	./build/test-dispatch
 	$(CC) $(CFLAGS) tests/test_tracker.c src/tracker.c -o build/test-tracker

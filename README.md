@@ -1,39 +1,32 @@
 # Delivery Parcel Tracker
 
-An IoT monitoring prototype written in C and Raylib. The first version simulates a parcel moving from a depot through two checkpoints to its destination.
+A C and Raylib prototype that combines a five-package delivery round, OpenStreetMap road routing and independent simulated sensor monitoring for each package.
 
 ## Current features
 
-### Dispatch demo
+### Linked dispatch and monitoring views
 
-The app opens with the shared local demo sign-in: username `demo`, password `parcel123`. The same session opens dispatch, profile and sensor monitoring. These are public demonstration values, not real authentication; do not enter personal passwords.
+**Export round report (R)** on Dispatch saves a snapshot of all five parcels as `round-summary-001.csv` beside the app executable (inside `Contents/MacOS` for the macOS app bundle). The report includes destination, delivered/pending/excluded status, planned stop when available, live/disconnected/archived sensor state, current and peak temperature, impacts, heat exposure, unobserved seconds and active flags. Disconnected temperatures are last-known readings, not fresh measurements. Delivered readings are frozen at delivery. Repeated exports use the next available number without overwriting earlier reports; reset and sign-out do not delete saved files. The save message names the file; a failed write is reported instead. This is a snapshot, not persistent application storage.
 
-After sign-in, five fictional package deliveries at Waterford landmarks appear beside a fixed-area OpenStreetMap view. Select a row or map marker and toggle its checkbox to include it. A planned route labels each row with its delivery order and selects the next stop. **Deliver next route stop** records that delivery and moves the blue driver marker there. Delivered packages are excluded from subsequent routes. **Reset delivery round** restores packages and the driver to the depot. State stays in memory; there is no live GPS, address search, arbitrary stop entry or per-package sensor feed.
+**Next parcel to check (N)** cycles through undelivered parcels with a heat warning, disconnected sensor or recorded impact. From Dispatch it opens Monitoring for that parcel; within Monitoring it switches parcels. The counter counts parcels, not individual warnings. Delivered parcels retain their history but no longer count as active flags. Impact history remains flagged for the rest of the round; this is not an acknowledgement workflow. With no active flags the button is disabled.
 
-Choose **Load OSM map (L)** to fetch just the 12 tiles covering the visible area. Tiles are cached beside the executable in `map-cache/` for seven days. Attribution remains on the map and links to OpenStreetMap copyright information. No bulk/offline-region downloads are performed. An internet connection is needed on first load; missing tiles show an empty grid and can be retried.
+Sign in using the local demo account `demo` / `parcel123`. Dispatch has the full-size road map, package selection and route controls. Select a package row or map marker, then choose **Monitor selected parcel** to open its separate Monitoring page. **View on dispatch map** returns with the same package selected. Monitoring has temperature, impacts, connection controls, history and package events; both views share the same per-package data. Dispatch rows and markers flag heat, impact history and disconnected sensors.
 
-Choose **Plan distance route (P)** to request Valhalla's automobile distance matrix with `shortest: true`, exhaustively compare all orders of the included undelivered stops (maximum 120 permutations), then request the road geometry for the selected order. The journey starts at the driver marker and ends at the last stop, with no return leg. Initially the driver is at the depot; after completing a delivery, replan from that stop. Distances are directional, so one-way roads matter. This selects the minimum stop order against the service's reported distance matrix, not a guarantee of a globally shortest route under every road-engine approximation. Time is an estimate, not live traffic. Changing stops or recording a delivery invalidates the old route. The driver position is manually simulated, not live vehicle location.
+Each of the five fictional Waterford packages has its own readings, 60-second graph and up to 32 events. Heat, impact and disconnect controls affect only the selected package. Undelivered packages continue monitoring while another package is selected, while the profile is open and while the session is locked. Completing a delivery freezes that package's telemetry for later inspection and export.
 
-Requests run in a background thread with HTTPS verification, timeouts, a response-size limit, an identifying User-Agent and a five-second UI request cooldown. Existing macOS `/usr/bin/curl` is executed with direct arguments, never a shell; no extra C package is installed. Public demo services have no availability guarantee and are unsuitable for production workloads. Only the fictional landmark coordinates are sent to Valhalla; tile coordinates and ordinary request metadata go to OpenStreetMap. No device location is collected.
+The views are linked through package identity, not a combined map-and-sensor layout. Monitoring displays the selected parcel's delivery state and planned stop number when a route is available. Package delivery is recorded in Dispatch with **Complete selected stop**, enabled only for the planned next stop. The lime driver marker moves to that delivery; the old route is cleared and remaining stops can be replanned from there. **Reset delivery round** restores all packages, telemetry and the driver to the depot.
 
-Use Up/Down to select a package, Space to include/exclude it, and L/P for map/routing. **Sensor monitoring** opens the original single-parcel simulation, separate from dispatch packages; **Dispatch map (M)** returns. **My profile / Sign out** opens the shared profile. Signing out clears packages, routes, driver position and the sensor session. The map and its pointer controls scale with the window.
+### OpenStreetMap and road routing
 
-Service references: [Valhalla routing API](https://valhalla.github.io/valhalla/api/route/api-reference/), [Valhalla matrix API](https://valhalla.github.io/valhalla/api/matrix/), [public demo service](https://github.com/valhalla/valhalla), [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+Choose **Load map (L)** to fetch the 12 tiles covering the visible area. Tiles are cached beside the executable in `map-cache/` for seven days. Attribution links to OpenStreetMap's copyright information. First load requires internet; missing tiles can be retried. No bulk region downloads are performed.
 
-### Original monitoring simulation
+Choose **Plan driving route (P)** to request Valhalla's directional automobile distance matrix using `shortest: true`, compare all selected stop orders (at most 120), and request the road geometry for the chosen order. The route starts at the simulated driver and ends at the last stop, with no return leg. This minimises the stop order against the service's distance matrix; it is not a guarantee of a globally shortest path under every road-engine approximation. Journey time is an estimate without live traffic. Changing included packages or completing a stop invalidates the route.
 
-- A drawn delivery route and animated parcel marker.
-- Parcel ID, delivery status and progress.
-- Start/resume, pause and reset controls.
-- A 20-second journey, with movement based on elapsed time.
-- Explicit simulation mode; no physical hardware is required.
-- Live simulated temperature with heat and cooling controls and a 30 C demo alert.
-- Impact trigger and cumulative impact count. Reset clears delivery and sensor state.
-- Sensor monitoring continues while parcel movement is paused.
-- Session condition summary: peak temperature, observed seconds at or above 30 C and total unobserved time while disconnected. Reset clears the summary; cooling and reconnection preserve it. These are monitoring-session metrics, not shipping safety certification.
-- Simulated disconnect/reconnect controls, with frozen readings and stale-reading age while disconnected.
-- Timestamped sensor history: the latest three events are displayed, with up to 32 retained in memory.
-- Export retained sensor events to CSV using Export CSV or the E key, without overwriting earlier exports.
+Requests run in a background thread using HTTPS, timeouts, bounded responses, a User-Agent and a five-second request cooldown. Existing macOS `/usr/bin/curl` is executed directly; there are no additional C dependencies. The public services have no availability guarantee. Only fictional landmark coordinates are submitted; no device location is collected.
+
+Use Up/Down to select packages, Space to include/exclude a selected package, and L/P for map and routing. **Profile** and **Lock** are available in the workspace header. No live GPS, address search, custom stop entry or physical sensor hardware is implemented.
+
+Service references: [Valhalla route API](https://valhalla.github.io/valhalla/api/route/api-reference/), [Valhalla matrix API](https://valhalla.github.io/valhalla/api/matrix/), [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/).
 
 ## Run on macOS
 
@@ -65,15 +58,13 @@ Physical hardware integration is not implemented. Temperature limits are fiction
 
 ## Event export
 
-Click **Export CSV (E)** or press E. Each export saves the currently retained events (at most 32), oldest first, with `elapsed_seconds`, `event`, `temperature_c` and `impact_count` columns. Impact counts are snapshots taken at each event, not the total at export time. The fourth column is new; consumers of earlier three-column exports should read fields by header name. Existing saved reports are unchanged. Older events that have fallen out of the bounded history are not included. Export does not clear history and works while disconnected or paused.
+Choose **Export package events (E)** or press E to export the currently selected package's retained events, including a delivered package's archived history. Columns are `package_id,elapsed_seconds,event,temperature_c,impact_count`. Each row identifies the package; impact counts are snapshots at event time. Times are simulation seconds rather than wall-clock timestamps.
 
-Files are numbered `events-001.csv` through `events-999.csv` beside the executable: `build/` for `make run`, or `build/Delivery Parcel Tracker.app/Contents/MacOS/` for the Mac app. Right-click the app and choose Show Package Contents to access its exports. The dashboard confirms success or reports a failure; check directory write access or whether all 999 names are occupied before retrying. Existing exports are never overwritten. Reset clears only live history, not saved CSV files.
+Files are numbered separately for each package, for example `PKG-003-events-001.csv` through `PKG-003-events-999.csv`, beside the executable. Existing files are never overwritten. Export does not clear history; reset and sign-out do not delete saved reports. Graph samples are not included. Earlier single-parcel exports retain their original format.
 
 ## Demo
 
-Start the delivery, pause partway along the route, resume to reach the destination, then reset to return to the depot.
-Use Trigger heat to raise the reading gradually to 40 C, Stop heat to cool to 20 C, and Trigger impact to record one impact. The heat alert appears at 30 C. Reset returns temperature to 20 C and clears impacts.
-Disconnect tracker to freeze telemetry and disable sensor triggers. Reconnect resumes monitoring without clearing impacts or the heat scenario. Delivery movement remains independent of telemetry connection. Reset restores the connection and clears history, leaving a single reset event at time zero.
+Sign in, load the map and plan a route. Select a package and trigger heat or an impact. Select another package to see its independent readings, then return to the first package and check its graph and events. Disconnect a package to see a stale-reading flag in the list, map and inspector. Complete the planned next stop, inspect its frozen history and replan the remaining deliveries. Lock/unlock to retain the round; sign out to clear it.
 
 ## Team
 
@@ -88,9 +79,11 @@ Each group member maintains their own development journal. Store group screencas
 `make test` checks delivery timing, sensor transitions, a combined delivery and monitoring scenario, and the actual CSV file-saving path. Export checks verify repeated saves, report preservation after reset, trailing-slash directories, invalid destinations and exhaustion of all 999 report names. Test reports are retained in isolated `.scratch/export-test.*` directories, not beside the app's real exports. These checks do not replace manually checking the dashboard button and E shortcut on both Macs.
 ## Demo login and user profile
 
-The app opens at a local demonstration login screen. Use username **demo** and password **parcel123**. Enter the password and click **Sign in** (or press Enter); Tab switches between the username and password fields. The password is masked, with a Show/Hide control. Incorrect credentials display an error and keep the dashboard closed.
+The app opens with a two-step operator sign-in. Confirm username **demo** and choose **Continue to password** (or press Enter). Enter **parcel123** and choose **Open workspace** (or press Enter). **Change** returns to the username step and clears the password. The password is masked, with a Show/Hide control. Incorrect details display an inline error, clear the attempted password and keep the workspace closed.
 
-From the dashboard, choose **My profile** to view the demo account and assigned shipment. Edit the display name and click **Save changes**. Names must contain 1–48 printable ASCII characters and cannot contain only spaces. Changes remain in memory for the current session. **Back to dashboard** preserves the session; **Sign out** clears the profile, password input, current delivery and sensor state and returns to login. Previously exported CSV files remain on disk. Monitoring continues while viewing the profile, but does not advance before login.
+Choose **Profile** in the workspace header. Edit the display name and click **Save changes**. Names must contain 1–48 printable ASCII characters and cannot contain only spaces. **Back to workspace** preserves the session. **Sign out** clears the profile, password input, packages, routes and sensor state and returns to the account step. Previously exported CSV files remain on disk. Monitoring continues while viewing the profile, but does not advance before login.
+
+Choose **Lock** in the workspace header or **Lock workspace** in the profile. Locking hides the workspace while preserving the delivery round, selected package and operator name. Undelivered packages continue sensor monitoring in the background. Enter the same demo password to unlock; incorrect attempts keep the session locked and do not reset the round. **Sign out instead** on the lock screen ends and clears the session. This demonstrates session navigation, not production access protection: the shared credentials remain public and local.
 
 This demonstrates the navigation and account interface only. The shared demo credentials are embedded in the prototype; there is no server, secure authentication, registration, password recovery or persistent user database. Do not use real account passwords.
 
@@ -101,4 +94,4 @@ The window can be resized; the complete dashboard scales to fit with matching mo
 
 The dashboard plots actual simulated telemetry from the last 60 seconds against a fixed 20–40 C scale. The amber line marks the 30 C demonstration threshold. Regular readings are sampled at most once per second; connection changes are recorded immediately. Disconnects and gaps over two seconds break the plotted line so old or missing readings do not appear as continuous fresh data.
 
-History keeps updating while delivery is paused or the profile is open. Reset all and sign-out clear the graph. Samples stay in memory for this session, with a maximum of 128 points. The event panel displays the latest three sensor events; CSV export still includes up to 32 retained sensor events and does not export graph samples.
+Each package retains its own history. Undelivered packages update while the profile or lock page is open; delivery freezes that package's history. Reset delivery round and sign-out clear all histories. Each graph retains up to 128 samples; the event panel shows the latest three of up to 32 events per package.
