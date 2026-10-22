@@ -12,30 +12,30 @@ static const Color BORDER = {43,57,69,255}, ACCENT = {203,239,105,255};
 static const Color GOOD = {121,216,177,255}, AMBER = {255,185,112,255};
 static Font font;
 static bool custom_font;
-static int export_status;
-static char export_name[32];
+static int export_status[5];
+static char export_name[5][64];
 
 static Account account;
-static TemperatureHistory temperature_history;
 static bool profile_page, show_password, login_error;
 static char username[33] = "demo", password[65], edit_name[49];
-static int login_focus = 1, profile_focus = 0, profile_status;
+static int login_step, login_focus, profile_focus = 0, profile_status;
 static float ui_scale = 1.0f;
 static Vector2 ui_offset;
-static void LoginPage(void);
-static void ProfilePage(Tracker *tracker, Sensors *sensors);
-
-void DashboardObserveSensors(const Sensors *sensors)
-{
-    TemperatureHistoryObserve(&temperature_history,sensors->seconds,
-                              sensors->temperature_c,sensors->connected);
-}
+static void LoginPage(DeliveryRound *round);
+static void ProfilePage(DeliveryRound *round);
 
 bool DashboardSignedIn(void) { return account.signed_in; }
-bool DashboardAccountPage(void) { return !account.signed_in || profile_page; }
+bool DashboardAccountPage(void) { return !account.signed_in || account.locked || profile_page; }
+void DashboardLock(void)
+{
+    if(!AccountLock(&account))return;
+    memset(password,0,sizeof(password));
+    strcpy(username,"demo");
+    login_step=1;login_focus=1;show_password=false;login_error=false;
+}
 void DashboardOpenProfile(void)
 {
-    if (!account.signed_in) return;
+    if (!account.signed_in || account.locked) return;
     profile_page = true;
     strcpy(edit_name, account.display_name);
     profile_status = 0;
@@ -46,10 +46,14 @@ void DashboardSetViewport(float scale, Vector2 offset)
     ui_offset = offset;
 }
 
-static void ExportEvents(const Sensors *sensors)
+static void ExportEvents(const DeliveryRound *round)
 {
-    export_status = SensorsExportCSV(sensors, GetApplicationDirectory(),
-                                    export_name, sizeof(export_name)) ? 1 : -1;
+    int i=round->selected;
+    export_status[i]=RoundExportCSV(round,GetApplicationDirectory(),export_name[i],sizeof(export_name[i]))?1:-1;
+}
+void DashboardClearExportStatus(void)
+{
+    memset(export_status,0,sizeof(export_status));
 }
 
 void DashboardInit(void)
@@ -85,220 +89,111 @@ static bool Button(Rectangle r, const char *label, bool enabled, bool primary)
     if (hover) SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
-static void TemperatureGraph(const Sensors *sensors)
+static void TemperatureGraph(const Sensors *sensors, const TemperatureHistory *history,bool archived)
 {
-    Card((Rectangle){308,776,464,208});
-    Text("TEMPERATURE HISTORY",332,795,12,MUTED);
-    Text(sensors->connected ? "Last 60 s" : "Disconnected / gaps",606,795,12,
-         sensors->connected ? MUTED : AMBER);
-    const Rectangle plot = {367,837,376,100};
-    for (int i=0; i<3; ++i) {
-        float y = plot.y+i*plot.height/2;
-        Color color = i==1 ? AMBER : BORDER;
-        DrawLineEx((Vector2){plot.x,y},(Vector2){plot.x+plot.width,y},1,color);
-        Text(TextFormat("%d C",40-i*10),332,y-6,11,i==1 ? AMBER : MUTED);
+    Card((Rectangle){316,492,548,492});
+    Text("Temperature history",340,516,20,INK);
+    Text(archived?"60 seconds before delivery":sensors->connected?"Last 60 seconds":"Disconnected / stale readings",340,552,13,MUTED);
+    Rectangle plot={376,616,460,268};
+    for(int i=0;i<3;++i) {
+        float y=plot.y+i*plot.height/2;
+        DrawLineEx((Vector2){plot.x,y},(Vector2){plot.x+plot.width,y},1,i==1?AMBER:BORDER);
+        Text(TextFormat("%d C",40-i*10),334,y-6,12,MUTED);
     }
-    Text("60 s ago",367,949,11,MUTED);
-    Text("30 C demo threshold",474,949,11,AMBER);
-    Text("Now",720,949,11,MUTED);
-    if (!temperature_history.count) {
-        Text("Waiting for sensor readings",402,876,15,MUTED);
-        return;
-    }
-    Vector2 previous = {0};
-    for (unsigned int i=0; i<temperature_history.count; ++i) {
-        const TemperatureSample *sample = &temperature_history.samples[i];
-        float age = (float)(sensors->seconds-sample->seconds);
-        Vector2 point = {plot.x+plot.width*(1-age/60.0f),
-                         plot.y+plot.height*(1-fminf(fmaxf((sample->temperature_c-20)/20,0),1))};
-        if (i && TemperatureHistoryCanJoin(&temperature_history.samples[i-1],sample))
-            DrawLineEx(previous,point,2,ACCENT);
-        if (sample->fresh) DrawCircleV(point,2,sample->temperature_c>=30 ? AMBER : ACCENT);
-        previous=point;
-    }
-}
-
-void DashboardDraw(Tracker *tracker, Sensors *sensors)
-{
-    if (!account.signed_in) { LoginPage(); return; }
-    if (profile_page) { ProfilePage(tracker,sensors); return; }
-    float progress = TrackerProgress(tracker);
-    bool alert = SensorsHeatAlert(sensors);
-    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-    ClearBackground(BG);
-
-    /* Shipment rail: actual state and controls, with no decorative navigation. */
-    DrawRectangle(0,0,280,1040,SURFACE);
-    DrawLine(280,0,280,1040,BORDER);
-    DrawRectangleRounded((Rectangle){28,28,34,34},0.2f,8,ACCENT);
-    DrawRectangleLinesEx((Rectangle){37,36,16,18},2,BG);
-    DrawLine(45,36,45,45,BG);
-    Text("PARCEL / OPS",76,35,19,INK);
-    Text("SHIPMENT CONSOLE",28,102,11,MUTED);
-    Text("PKG-001",28,126,32,INK);
-    Text("Single parcel demonstration",28,170,14,MUTED);
-    DrawLine(28,207,252,207,BORDER);
-    Text("DELIVERY STATE",28,232,11,MUTED);
-    DrawCircle(34,271,5,tracker->running ? ACCENT : MUTED);
-    Text(TrackerStatus(tracker),49,257,24,INK);
-    Text("ROUTE PROGRESS",28,317,11,MUTED);
-    const char *percent = TextFormat("%.0f",progress*100);
-    Text(percent,28,342,56,INK);
-    Text("%",40 + MeasureTextEx(font,percent,56,0).x,369,21,MUTED);
-    DrawRectangleRounded((Rectangle){28,416,224,6},1,8,BORDER);
-    if (progress>0) DrawRectangleRounded((Rectangle){28,416,224*progress,6},1,8,ACCENT);
-    Text("20 second simulated journey",28,440,13,MUTED);
-    DrawLine(28,484,252,484,BORDER);
-    Text("DELIVERY CONTROLS",28,511,11,MUTED);
-    const char *delivery_action = progress >= 1 ? "Delivered" : tracker->running ? "Delivery running" :
-                                  tracker->elapsed_seconds > 0 ? "Resume delivery" : "Start delivery";
-    if (Button((Rectangle){28,542,224,44},delivery_action,
-               !tracker->running && progress<1,true)) TrackerStart(tracker);
-    if (Button((Rectangle){28,598,104,44},"Pause",tracker->running,false)) TrackerPause(tracker);
-    if (Button((Rectangle){144,598,108,44},"Reset all",true,false)) {
-        TrackerReset(tracker);
-        SensorsReset(sensors);
-        TemperatureHistoryReset(&temperature_history);
-    }
-    if (Button((Rectangle){28,660,224,40},sensors->connected ? "Disconnect tracker" : "Reconnect tracker",true,false))
-        SensorsSetConnected(sensors,!sensors->connected);
-    Text(sensors->connected ? "Telemetry connected" : "Telemetry disconnected",28,714,13,
-         sensors->connected ? GOOD : AMBER);
-    if (export_status) {
-        Text(export_status > 0 ? TextFormat("Saved %s",export_name) : "CSV export failed",28,776,13,
-             export_status > 0 ? GOOD : AMBER);
-        Text(export_status > 0 ? "Beside the app executable" : "Check folder access; retry export",28,800,12,MUTED);
-    }
-    Text("ALERT SUMMARY",28,844,11,MUTED);
-    Text(!sensors->connected ? "Temperature reading is stale" : alert ? "Heat threshold exceeded" : "Temperature below threshold",28,866,13,!sensors->connected || alert ? AMBER : GOOD);
-    Text(sensors->impact_count ? "Impact history recorded" : "No recorded impacts",28,887,13,sensors->impact_count ? AMBER : MUTED);
-    Text("C + RAYLIB",28,960,12,MUTED);
-    Text("Advanced Programming",28,983,14,INK);
-    Text("Prototype / simulation",28,1007,12,MUTED);
-
-    Text("Delivery overview",308,28,30,INK);
-    Text("Follow the shipment. Inspect its handling conditions.",309,68,15,MUTED);
-    DrawRectangleRounded((Rectangle){1057,33,195,32},0.4f,8,(Color){31,45,34,255});
-    DrawCircle(1074,49,4,ACCENT);
-    Text("SIMULATION ACTIVE",1088,41,12,ACCENT);
-
-    if (Button((Rectangle){1057,73,195,32},"My profile",true,false)) {
-        profile_page=true;
-        strcpy(edit_name,account.display_name);
-        profile_status=0;
-    }
-
-    /* Fictional street schematic; this is not a real geographic map. */
-    Rectangle map={308,112,944,392};
-    Card(map);
-    Text("ROUTE MONITOR",332,135,12,MUTED);
-    Text("Depot to destination",332,158,20,INK);
-    Text("Fictional route / no GPS connected",992,141,12,MUTED);
-    Color grid={29,39,48,255}, street={38,50,61,255};
-    for (int row=0;row<4;++row) {
-        for (int col=0;col<9;++col) {
-            float x=332+col*99, y=211+row*56;
-            DrawRectangleRounded((Rectangle){x,y,78,36},0.12f,6,grid);
+    for(unsigned i=0;i<history->count;++i) {
+        const TemperatureSample *sample=&history->samples[i];
+        float x=plot.x+plot.width*(1-(float)(sensors->seconds-sample->seconds)/60);
+        float y=plot.y+plot.height*(1-fminf(fmaxf((sample->temperature_c-20)/20,0),1));
+        if(i && TemperatureHistoryCanJoin(&history->samples[i-1],sample)) {
+            const TemperatureSample *previous=&history->samples[i-1];
+            Vector2 a={plot.x+plot.width*(1-(float)(sensors->seconds-previous->seconds)/60),
+                       plot.y+plot.height*(1-fminf(fmaxf((previous->temperature_c-20)/20,0),1))};
+            DrawLineEx(a,(Vector2){x,y},2,ACCENT);
         }
+        if(sample->fresh)DrawCircleV((Vector2){x,y},2,sample->temperature_c>=30?AMBER:ACCENT);
     }
-    for (int col=0;col<8;++col)
-        DrawLineEx((Vector2){420+col*99,207},(Vector2){420+col*99,446},1,street);
-    for (int row=0;row<4;++row)
-        DrawLineEx((Vector2){331,253+row*56},(Vector2){1227,253+row*56},1,street);
-    const Vector2 route[]={{366,376},{620,286},{900,370},{1192,270}};
-    const char *names[]={"DEPOT","HUB 01","HUB 02","DESTINATION"};
-    float lengths[3],total=0;
-    for (int i=0;i<3;++i) {
-        float dx=route[i+1].x-route[i].x,dy=route[i+1].y-route[i].y;
-        lengths[i]=sqrtf(dx*dx+dy*dy);
-        total+=lengths[i];
-        DrawLineEx(route[i],route[i+1],5,(Color){71,89,104,255});
-    }
-    float remaining=progress*total;
-    Vector2 parcel=route[0];
-    for (int i=0;i<3;++i) {
-        float travelled=fminf(fmaxf(remaining,0),lengths[i]);
-        float t=travelled/lengths[i];
-        Vector2 end={route[i].x+(route[i+1].x-route[i].x)*t,
-                     route[i].y+(route[i+1].y-route[i].y)*t};
-        if (travelled>0) DrawLineEx(route[i],end,5,ACCENT);
-        if (remaining>=0) parcel=end;
-        remaining-=lengths[i];
-    }
-    float checkpoint_distance=0;
-    for (int i=0;i<4;++i) {
-        if (i>0) checkpoint_distance+=lengths[i-1];
-        /* Use the same cumulative distance as parcel placement, not equal thirds. */
-        bool reached=progress >= 1 || progress*total>=checkpoint_distance;
-        DrawCircleV(route[i],9,SURFACE);
-        DrawCircleLinesV(route[i],9,reached ? ACCENT : MUTED);
-        DrawCircleV(route[i],3,reached ? ACCENT : MUTED);
-        float width=MeasureTextEx(font,names[i],11,0).x;
-        DrawRectangleRounded((Rectangle){route[i].x-width/2-8,route[i].y+20,width+16,25},0.2f,8,BG);
-        Text(names[i],route[i].x-width/2,route[i].y+27,11,INK);
-        const char *checkpoint_state = reached ? "Reached" : "Upcoming";
-        float state_width = MeasureTextEx(font,checkpoint_state,12,0).x;
-        Text(checkpoint_state,route[i].x-state_width/2,route[i].y+49,12,reached ? ACCENT : MUTED);
-    }
-    DrawCircleV(parcel,20,(Color){47,65,42,255});
-    DrawCircleV(parcel,12,ACCENT);
-    DrawRectangleLinesEx((Rectangle){parcel.x-5,parcel.y-6,10,12},1.5f,BG);
-    DrawLineEx((Vector2){parcel.x,parcel.y-6},(Vector2){parcel.x,parcel.y},1.5f,BG);
-    DrawLine(332,458,1228,458,BORDER);
-    DrawCircle(339,480,4,ACCENT);
-    Text("Completed route",351,472,12,MUTED);
-    DrawCircle(491,480,4,(Color){71,89,104,255});
-    Text("Remaining route",503,472,12,MUTED);
-    Text("Reached checkpoints use route distance",987,472,12,MUTED);
-
-    Card((Rectangle){308,524,464,232});
-    Text("TEMPERATURE",332,547,12,MUTED);
-    Text(TextFormat("%.1f",sensors->temperature_c),332,575,53,INK);
-    Text("C",463,597,24,MUTED);
-    Color thermal=alert || !sensors->connected ? AMBER : GOOD;
-    Text(!sensors->connected ? "STALE READING" : alert ? "HEAT ALERT" : "BELOW THRESHOLD",572,589,13,thermal);
-    Text(!sensors->connected ? TextFormat("Last reading %.1fs ago",sensors->stale_seconds) : "Demo threshold: 30 C",572,613,12,MUTED);
-    DrawRectangleRounded((Rectangle){332,648,416,7},1,8,BORDER);
-    float level=fminf(fmaxf((sensors->temperature_c-20)/20,0),1);
-    if (level>0) DrawRectangleRounded((Rectangle){332,648,416*level,7},1,8,thermal);
-    DrawLine(540,643,540,660,AMBER);
-    Text("20 C baseline",332,668,11,MUTED);
-    Text("40 C heat target",667,668,11,MUTED);
-    if (Button((Rectangle){332,702,170,36},sensors->heating ? "Stop heat scenario" : "Trigger heat",sensors->connected,false)) {
-        if (sensors->heating) SensorsStopHeat(sensors);
-        else SensorsTriggerHeat(sensors);
-    }
-    Text(!sensors->connected ? "Monitoring suspended" : sensors->heating ? "Heating at 2 C / second" : "Baseline / cooling",526,714,12,MUTED);
-
-    Card((Rectangle){792,524,460,232});
-    Text("HANDLING IMPACTS",816,547,12,MUTED);
-    Text(TextFormat("%u",sensors->impact_count),816,575,sensors->impact_count>9999 ? 34 : 53,INK);
-    Text(!sensors->connected ? "LAST KNOWN COUNT" : sensors->impact_count ? "IMPACT RECORDED" : "NO IMPACTS",1000,589,13,sensors->impact_count || !sensors->connected ? AMBER : GOOD);
-    Text("Cumulative since last reset",1000,613,12,MUTED);
-    DrawLine(816,648,1228,648,BORDER);
-    Text("A trigger records one simulated impact.",816,666,13,MUTED);
-    if (Button((Rectangle){816,702,170,36},"Trigger impact",sensors->connected,false)) SensorsTriggerImpact(sensors);
-    Text("Reset all clears the count",1000,714,12,MUTED);
-
-    TemperatureGraph(sensors);
-    Card((Rectangle){792,776,460,208});
-    Text("RECENT EVENTS",816,796,12,MUTED);
-    if (Button((Rectangle){1050,784,178,36},"Export CSV (E)",true,false) || IsKeyPressed(KEY_E))
-        ExportEvents(sensors);
-    Text("Latest 3 / 32 retained for export",816,825,11,MUTED);
-    unsigned int first = sensors->event_count > 3 ? sensors->event_count - 3 : 0;
-    for (unsigned int i=first; i<sensors->event_count; ++i) {
-        const SensorEvent *event = &sensors->events[i];
-        float y = 854 + (i-first)*37;
-        Text(TextFormat("%.1f s",event->seconds),816,y,12,MUTED);
-        Text(SensorsEventName(event->kind),900,y,14,INK);
-    }
-    Text(TextFormat("Peak %.1f C  /  Heat exposure %.1f s  /  Unobserved %.1f s",
-         sensors->peak_temperature_c, sensors->heat_seconds, sensors->unobserved_seconds),
-         308,1005,13,MUTED);
-    Text("DEMO DATA / NO PHYSICAL DEVICE",1022,1005,11,MUTED);
+    if(!history->count)Text("Waiting for readings",490,740,16,MUTED);
+    Text("60 s ago",376,922,12,MUTED);
+    Text("30 C demo threshold",520,922,12,AMBER);
+    Text("Now",808,922,12,MUTED);
 }
 
+void DashboardDraw(DeliveryRound *round)
+{
+    if(!account.signed_in || account.locked) {LoginPage(round);return;}
+    if(profile_page)ProfilePage(round);
+}
+
+int DashboardDrawMonitoring(DeliveryRound *round)
+{
+    ClearBackground(BG);
+    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    Text("Parcel Ops",28,32,26,INK);
+    Text("Package monitoring",316,28,32,INK);
+    if(Button((Rectangle){800,28,204,40},"View on dispatch map",true,false))return 1;
+    if(Button((Rectangle){1020,28,104,40},"Profile",true,false))return 2;
+    if(Button((Rectangle){1136,28,116,40},"Lock",true,false))return 3;
+    Text("Packages",28,132,20,INK);
+    Text("Choose a parcel to monitor",28,166,15,MUTED);
+    if(IsKeyPressed(KEY_DOWN))RoundSelect(round,(round->selected+1)%5);
+    if(IsKeyPressed(KEY_UP))RoundSelect(round,(round->selected+4)%5);
+    for(int i=0;i<5;++i) {
+        float y=218+i*100;
+        if(Button((Rectangle){24,y,240,64},round->packages[i].id,true,i==round->selected))RoundSelect(round,i);
+        Text(round->packages[i].destination,32,y+72,13,MUTED);
+    }
+    Text("Simulated sensor readings",28,940,14,MUTED);
+    int issues=RoundIssueCount(round);
+    if(Button((Rectangle){24,784,240,44},"Next parcel to check (N)",issues>0,false) || (issues>0&&IsKeyPressed(KEY_N)))
+        RoundSelectNextIssue(round);
+    Text(TextFormat("%d undelivered parcels flagged",issues),28,852,14,issues?AMBER:GOOD);
+    Text("Heat / impact history / offline",28,882,13,MUTED);
+    Text("Up / Down  Select package",28,972,13,MUTED);
+    DrawLine(288,0,288,1040,BORDER);
+    int index=round->selected;
+    Package *package=&round->packages[index];
+    Sensors *sensors=&round->sensors[index];
+    Text(TextFormat("%s / %s",package->id,package->destination),316,82,20,INK);
+    const char *delivery=package->delivered?"Delivered / readings archived":"Not included in the planned round";
+    if(!package->delivered && package->included)delivery="Included / route not planned";
+    if(!package->delivered && round->route.ready)
+        for(int i=0;i<round->route.count;++i)if(round->route.order[i]==index)
+            delivery=TextFormat("Planned delivery stop %d of %d",i+1,round->route.count);
+    Text(delivery,316,122,16,package->delivered?GOOD:MUTED);
+    bool active=!package->delivered;
+    bool alert=SensorsHeatAlert(sensors);
+    Card((Rectangle){316,184,448,284});
+    Text(package->id,340,208,16,MUTED);
+    Text(TextFormat("%.1f C",sensors->temperature_c),340,248,38,INK);
+    Text(package->delivered?"Archived at delivery":!sensors->connected?"Stale sensor reading":alert?"Heat threshold exceeded":"Temperature within demo range",
+         340,306,13,!sensors->connected||alert?AMBER:GOOD);
+    if(Button((Rectangle){340,350,400,44},sensors->heating?"Stop heat scenario":"Trigger heat",active&&sensors->connected,false)) {
+        if(sensors->heating)SensorsStopHeat(sensors);else SensorsTriggerHeat(sensors);
+    }
+    Text(!sensors->connected?TextFormat("Last reading %.1f s ago",sensors->stale_seconds):TextFormat("Peak %.1f C / Exposure %.1f s",sensors->peak_temperature_c,sensors->heat_seconds),340,426,12,MUTED);
+    Card((Rectangle){788,184,464,284});
+    Text("Handling and connection",812,208,18,INK);
+    Text(TextFormat("%u impacts recorded",sensors->impact_count),812,248,22,sensors->impact_count?AMBER:INK);
+    if(Button((Rectangle){812,300,416,40},"Record impact",active&&sensors->connected,false))SensorsTriggerImpact(sensors);
+    if(Button((Rectangle){812,356,416,40},sensors->connected?"Disconnect sensor":"Reconnect sensor",active,false))
+        SensorsSetConnected(sensors,!sensors->connected);
+    if(Button((Rectangle){812,412,416,40},"Export package events (E)",true,false)||IsKeyPressed(KEY_E))ExportEvents(round);
+    TemperatureGraph(sensors,&round->histories[index],package->delivered);
+    Card((Rectangle){888,492,364,492});
+    Text("Recent package events",912,516,20,INK);
+    Text(package->delivered?"History frozen at delivery":"Latest 7 / 32 retained",912,552,13,MUTED);
+    unsigned first=sensors->event_count>7?sensors->event_count-7:0;
+    for(unsigned i=first;i<sensors->event_count;++i) {
+        const SensorEvent *event=&sensors->events[i];
+        float y=600+(i-first)*40;
+        Text(TextFormat("%.1fs",event->seconds),912,y,12,MUTED);
+        Text(SensorsEventName(event->kind),976,y,13,INK);
+    }
+    Text(TextFormat("Unobserved time %.1f s",sensors->unobserved_seconds),912,938,12,MUTED);
+    if(export_status[index])Text(export_status[index]>0?"Package CSV saved beside app":"Export failed. Check folder access.",912,958,12,export_status[index]>0?GOOD:AMBER);
+    Text(TextFormat("%s / %s / Simulated telemetry",package->id,package->destination),316,1008,13,MUTED);
+    return 0;
+}
 static void Input(Rectangle bounds, char *buffer, size_t capacity, int id,
                   int *focus, bool secret, const char *hint)
 {
@@ -340,48 +235,94 @@ static void Input(Rectangle bounds, char *buffer, size_t capacity, int id,
     EndScissorMode();
 }
 
-static void LoginPage(void)
+static void SignOut(void)
 {
-    ClearBackground(BG);
-    Text("PARCEL / OPS",80,65,24,ACCENT);
-    Text("DELIVERY MONITORING",80,180,13,MUTED);
-    Text("Every parcel.",80,220,52,INK);
-    Text("Every checkpoint.",80,282,52,INK);
-    Text("Monitor a shipment and its handling conditions",80,377,19,MUTED);
-    Text("from one place.",80,407,19,MUTED);
-    DrawLineEx((Vector2){95,575}, (Vector2){470,575}, 4, BORDER);
-    const char *stops[] = {"DEPOT", "HUB", "DELIVERED"};
-    for (int i=0; i<3; ++i) {
-        DrawCircle(95+i*187,575,9,i==0 ? ACCENT : MUTED);
-        Text(stops[i],78+i*187,604,12,MUTED);
-    }
-    Text("C + RAYLIB  /  SIMULATED IOT",80,920,13,MUTED);
-    Card((Rectangle){620,160,580,720});
-    Text("Welcome back",660,202,34,INK);
-    Text("Sign in to the parcel dashboard",660,253,18,MUTED);
-    Text("USERNAME",660,312,12,MUTED);
-    if (IsKeyPressed(KEY_TAB)) login_focus = login_focus == 0 ? 1 : 0;
-    Input((Rectangle){660,338,500,60}, username, sizeof(username), 0, &login_focus, false, "Username");
-    Text("PASSWORD",660,426,12,MUTED);
-    Input((Rectangle){660,452,500,60}, password, sizeof(password), 1, &login_focus, !show_password, "Password");
-    if (Button((Rectangle){990,526,170,36},show_password ? "Hide password" : "Show password",true,false)) show_password=!show_password;
-    if (login_error) Text("Use the demo username and password below.",660,583,17,AMBER);
-    if (Button((Rectangle){660,622,500,48},"Sign in",true,true) || IsKeyPressed(KEY_ENTER)) {
-        if (AccountSignIn(&account,username,password)) {
-            memset(password,0,sizeof(password));
-            show_password=false;
-            login_error=false;
-            profile_page=false;
-        } else login_error=true;
-    }
-    Text("DEMO ACCOUNT",660,714,12,ACCENT);
-    Text("Username: demo   /   Password: parcel123",660,742,18,INK);
-    Text("Local prototype login. No online account or secure",660,790,16,MUTED);
-    Text("authentication service is connected.",660,815,16,MUTED);
+    AccountSignOut(&account);
+    memset(edit_name,0,sizeof(edit_name));
+    memset(password,0,sizeof(password));
+    strcpy(username,"demo");
+    profile_page=false;login_focus=0;login_step=0;
+    profile_status=0;memset(export_status,0,sizeof(export_status));show_password=false;login_error=false;
 }
 
-static void ProfilePage(Tracker *tracker, Sensors *sensors)
+static void LoginPage(DeliveryRound *round)
 {
+    (void)round;
+    ClearBackground(BG);
+    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    DrawRectangle(0,0,568,1040,SURFACE);
+    DrawLine(568,0,568,1040,BORDER);
+    DrawRectangleRounded((Rectangle){64,64,36,36},0.2f,8,ACCENT);
+    DrawRectangleLinesEx((Rectangle){73,73,18,19},2,BG);
+    Text("Parcel Ops",116,67,26,INK);
+    Text(account.locked?"Your round is":"Ready for your",64,192,44,INK);
+    Text(account.locked?"right here.":"next delivery?",64,246,44,INK);
+    Text("Plan the stops. Follow the route.",64,326,20,MUTED);
+    Text("Keep an eye on every parcel.",64,358,20,MUTED);
+    DrawLineEx((Vector2){96,496},(Vector2){96,712},2,BORDER);
+    const char *labels[]={"Plan the delivery round","Compare driving routes","Monitor parcel conditions"};
+    const char *details[]={"Choose the packages for this trip","Compare road distances between stops","See heat, impacts and connection gaps"};
+    for(int i=0;i<3;++i) {
+        int y=480+i*104;
+        DrawCircle(96,y+12,12,i==0?ACCENT:BORDER);
+        DrawCircle(96,y+12,4,i==0?BG:MUTED);
+        Text(labels[i],128,y,19,INK);
+        Text(details[i],128,y+33,15,MUTED);
+    }
+    Text("C + Raylib  /  Local demonstration",64,944,15,MUTED);
+    if(account.locked) {
+        Text("Session retained",680,138,16,GOOD);
+    } else {
+        Text("Account",680,138,16,login_step==0?ACCENT:MUTED);
+        DrawLine(766,147,818,147,BORDER);
+        Text("Password",842,138,16,login_step==1?ACCENT:MUTED);
+    }
+    Text(account.locked?"Workspace locked":login_step?"Welcome back":"Sign in to Parcel Ops",680,214,36,INK);
+    Text(account.locked?"Unlock to continue your delivery round.":login_step?"One workspace for dispatch and monitoring.":"Start with your operator account.",680,272,18,MUTED);
+    if(login_step==0 && !account.locked) {
+        Text("Operator username",680,348,16,INK);
+        Input((Rectangle){680,378,480,64},username,sizeof(username),0,&login_focus,false,"Enter your username");
+        Text("For this demonstration, use demo.",680,464,16,MUTED);
+        bool advance=Button((Rectangle){680,520,480,52},"Continue to password",username[0]!=0,true);
+        if(username[0] && (advance || IsKeyPressed(KEY_ENTER))) {
+            login_step=1;login_focus=1;login_error=false;
+        }
+    } else {
+        Text(account.locked?account.display_name:username,680,334,22,INK);
+        if(!account.locked && Button((Rectangle){1024,324,136,40},"Change",true,false)) {
+            login_step=0;login_focus=0;login_error=false;
+            memset(password,0,sizeof(password));show_password=false;
+        }
+        Text("Password",680,404,16,INK);
+        Input((Rectangle){680,436,480,64},password,sizeof(password),1,&login_focus,!show_password,"Enter your password");
+        if(Button((Rectangle){990,516,170,36},show_password?"Hide password":"Show password",true,false))show_password=!show_password;
+        if(login_error)Text("Details did not match. Check them and try again.",680,578,16,AMBER);
+        bool submit=Button((Rectangle){680,624,480,52},account.locked?"Unlock workspace":"Open workspace",password[0]!=0,true);
+        if(password[0] && (submit || IsKeyPressed(KEY_ENTER))) {
+            bool was_locked=account.locked;
+            bool accepted=was_locked?AccountUnlock(&account,username,password):AccountSignIn(&account,username,password);
+            if(accepted) {
+                if(!was_locked)profile_page=false;
+                login_error=false;
+            } else login_error=true;
+            memset(password,0,sizeof(password));
+            show_password=false;
+        }
+        if(account.locked) {
+            Text("Monitoring continues. Your packages and route are retained.",680,708,15,MUTED);
+            if(Button((Rectangle){680,738,200,32},"Sign out instead",true,false))SignOut();
+        }
+    }
+    DrawLine(680,780,1160,780,BORDER);
+    Text("Demo access",680,806,18,INK);
+    Text("Username: demo     Password: parcel123",680,843,16,MUTED);
+    Text("Local prototype only. Do not enter a personal password.",680,889,15,MUTED);
+    Text("No online account service is connected.",680,917,15,MUTED);
+}
+
+static void ProfilePage(DeliveryRound *round)
+{
+    (void)round;
     ClearBackground(BG);
     Text("PARCEL / OPS",80,65,24,ACCENT);
     if (Button((Rectangle){920,55,280,44},"Back to workspace",true,false)) profile_page=false;
@@ -407,18 +348,8 @@ static void ProfilePage(Tracker *tracker, Sensors *sensors)
     Text("Profile edits last until sign-out or closing the app.",200,742,17,MUTED);
     Text("Signing out clears packages, routes and the sensor session.",200,775,17,MUTED);
     if (Button((Rectangle){160,888,240,48},"Sign out",true,false)) {
-        AccountSignOut(&account);
-        TrackerReset(tracker);
-        SensorsReset(sensors);
-        TemperatureHistoryReset(&temperature_history);
-        memset(edit_name,0,sizeof(edit_name));
-        memset(password,0,sizeof(password));
-        profile_page=false;
-        login_focus=0;
-        profile_status=0;
-        export_status=0;
-        show_password=false;
-        login_error=false;
+        SignOut();
     }
+    if(Button((Rectangle){424,888,240,48},"Lock workspace",true,false))DashboardLock();
     Text("DEMO ACCOUNT  /  NO PASSWORDS SAVED",650,908,13,MUTED);
 }
