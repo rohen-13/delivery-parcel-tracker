@@ -5,3 +5,6 @@ build/
 # Individual submission documents stay local.
 docs/journals/tymofii-*.md
 docs/journals/tymofii-*.docx
+
+# Temporary test export folders
+.scratch/
