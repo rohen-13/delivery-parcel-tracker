@@ -95,3 +95,8 @@ The window can be resized; the complete dashboard scales to fit with matching mo
 The dashboard plots actual simulated telemetry from the last 60 seconds against a fixed 20–40 C scale. The amber line marks the 30 C demonstration threshold. Regular readings are sampled at most once per second; connection changes are recorded immediately. Disconnects and gaps over two seconds break the plotted line so old or missing readings do not appear as continuous fresh data.
 
 Each package retains its own history. Undelivered packages update while the profile or lock page is open; delivery freezes that package's history. Reset delivery round and sign-out clear all histories. Each graph retains up to 128 samples; the event panel shows the latest three of up to 32 events per package.
+
+
+## Package event filters
+
+On Package monitoring, the event panel now lists the newest matching events first. Choose All, Heat (scenario changes and alerts), Impact, or Link (disconnect/reconnect). Newer and Older navigate five events per page through the selected parcel's retained history. Switching parcel or filter returns to the newest page. Empty categories show No matching events; unavailable navigation is disabled. At most 32 events remain available, so events already evicted from memory cannot be recovered here. Filters affect only this view: package CSV export still includes the full retained history. Archived parcels can be filtered too.

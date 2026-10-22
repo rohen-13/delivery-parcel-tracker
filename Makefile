@@ -6,8 +6,8 @@ RAYLIB_LIBS = $(shell pkg-config --libs raylib)
 .PHONY: all run app test clean
 all: build/parcel-tracker
 
-APP_SOURCES = src/main.c src/dashboard.c src/round.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
-APP_HEADERS = src/round.h src/dispatch.h src/dispatch_ui.h src/dashboard.h src/sensors.h src/account.h src/temperature_history.h
+APP_SOURCES = src/event_view.c src/main.c src/dashboard.c src/round.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
+APP_HEADERS = src/event_view.h src/round.h src/dispatch.h src/dispatch_ui.h src/dashboard.h src/sensors.h src/account.h src/temperature_history.h
 
 build/parcel-tracker: $(APP_SOURCES) $(APP_HEADERS)
 	mkdir -p build
@@ -44,3 +44,5 @@ test:
 	./build/test-account
 	$(CC) $(CFLAGS) tests/test_temperature_history.c src/temperature_history.c -o build/test-temperature-history
 	./build/test-temperature-history
+	$(CC) $(CFLAGS) tests/test_event_view.c src/event_view.c src/sensors.c -o build/test-event-view -lm
+	./build/test-event-view

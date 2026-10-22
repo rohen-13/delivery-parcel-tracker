@@ -1,5 +1,6 @@
 #include "dashboard.h"
 #include "account.h"
+#include "event_view.h"
 #include "temperature_history.h"
 #include <string.h>
 #include <math.h>
@@ -16,6 +17,9 @@ static int export_status[5];
 static char export_name[5][64];
 
 static Account account;
+static EventFilter event_filter;
+static unsigned event_page;
+static int event_package = -1;
 static bool profile_page, show_password, login_error;
 static char username[33] = "demo", password[65], edit_name[49];
 static int login_step, login_focus, profile_focus = 0, profile_status;
@@ -181,14 +185,27 @@ int DashboardDrawMonitoring(DeliveryRound *round)
     TemperatureGraph(sensors,&round->histories[index],package->delivered);
     Card((Rectangle){888,492,364,492});
     Text("Recent package events",912,516,20,INK);
-    Text(package->delivered?"History frozen at delivery":"Latest 7 / 32 retained",912,552,13,MUTED);
-    unsigned first=sensors->event_count>7?sensors->event_count-7:0;
-    for(unsigned i=first;i<sensors->event_count;++i) {
-        const SensorEvent *event=&sensors->events[i];
-        float y=600+(i-first)*40;
+    Text(package->delivered?"Archived / newest first":"Live history / newest first",912,552,13,MUTED);
+    if (event_package != index) { event_package=index; event_page=0; }
+    const char *filters[]={"All","Heat","Impact","Link"};
+    for (int i=0;i<4;++i) {
+        if (Button((Rectangle){912+i*80,578,72,36},filters[i],true,(int)event_filter==i)) {
+            event_filter=(EventFilter)i;
+            event_page=0;
+        }
+    }
+    EventView view=EventViewBuild(sensors,event_filter,event_page);
+    event_page=view.page;
+    for (unsigned i=0;i<view.count;++i) {
+        const SensorEvent *event=&sensors->events[view.indices[i]];
+        float y=636+i*40;
         Text(TextFormat("%.1fs",event->seconds),912,y,12,MUTED);
         Text(SensorsEventName(event->kind),976,y,13,INK);
     }
+    if (!view.count) Text("No matching events",912,650,16,MUTED);
+    if (Button((Rectangle){912,854,144,40},"Newer",event_page>0,false)) --event_page;
+    if (Button((Rectangle){1072,854,156,40},"Older",view.pages && event_page+1<view.pages,false)) ++event_page;
+    Text(TextFormat("%u matches / page %u of %u",view.total,view.pages?view.page+1:0,view.pages),912,910,12,MUTED);
     Text(TextFormat("Unobserved time %.1f s",sensors->unobserved_seconds),912,938,12,MUTED);
     if(export_status[index])Text(export_status[index]>0?"Package CSV saved beside app":"Export failed. Check folder access.",912,958,12,export_status[index]>0?GOOD:AMBER);
     Text(TextFormat("%s / %s / Simulated telemetry",package->id,package->destination),316,1008,13,MUTED);
