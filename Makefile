@@ -6,8 +6,8 @@ RAYLIB_LIBS = $(shell pkg-config --libs raylib)
 .PHONY: all run app test clean
 all: build/parcel-tracker
 
-APP_SOURCES = src/event_view.c src/main.c src/dashboard.c src/round.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
-APP_HEADERS = src/event_view.h src/round.h src/dispatch.h src/dispatch_ui.h src/dashboard.h src/sensors.h src/account.h src/temperature_history.h
+APP_SOURCES = src/round_store.c src/event_view.c src/main.c src/dashboard.c src/round.c src/sensors.c src/dispatch.c src/dispatch_ui.c src/account.c src/temperature_history.c
+APP_HEADERS = src/ui_typography.h src/round_store.h src/event_view.h src/round.h src/dispatch.h src/dispatch_ui.h src/dashboard.h src/sensors.h src/account.h src/temperature_history.h
 
 build/parcel-tracker: $(APP_SOURCES) $(APP_HEADERS)
 	mkdir -p build
@@ -26,6 +26,11 @@ clean:
 
 test:
 	mkdir -p build
+	$(CC) $(CFLAGS) tests/test_delivery_run.c src/round.c src/dispatch.c src/sensors.c src/temperature_history.c -o build/test-delivery-run -lm
+	./build/test-delivery-run
+	$(CC) $(CFLAGS) tests/test_round_store.c src/round_store.c src/round.c src/dispatch.c src/sensors.c src/temperature_history.c -o build/test-round-store -lm
+	mkdir -p .scratch
+	./build/test-round-store "$$(mktemp -d .scratch/round-store.XXXXXX)"
 	$(CC) $(CFLAGS) tests/test_round.c src/round.c src/dispatch.c src/sensors.c src/temperature_history.c -o build/test-round -lm
 	mkdir -p .scratch
 	./build/test-round "$$(mktemp -d .scratch/round-test.XXXXXX)"

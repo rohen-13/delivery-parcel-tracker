@@ -15,6 +15,8 @@ typedef struct {
     double distance_km, duration_seconds;
     GeoPoint points[DISPATCH_MAX_POINTS];
     int point_count;
+    int leg_end[DISPATCH_MAX_PACKAGES], leg_count;
+    double leg_seconds[DISPATCH_MAX_PACKAGES], leg_km[DISPATCH_MAX_PACKAGES];
     bool ready;
     char message[160];
 } DeliveryRoute;

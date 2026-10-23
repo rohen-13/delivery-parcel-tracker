@@ -25,11 +25,15 @@ int main(int argc,char **argv)
     DeliveryRoute r = {0};
     assert(!DispatchParseRoute("{\"error\":\"No path\"}",&r));
     assert(!DispatchParseRoute("{\"trip\":{\"summary\":{\"length\":1,\"time\":2},\"legs\":[]}}",&r));
-    assert(DispatchParseRoute("{\"trip\":{\"summary\":{\"length\":1,\"time\":2},\"legs\":[{\"shape\":\"_p~iF~ps|U_ulLnnqC_mqNvxq`@\"}]}}",&r));
+    assert(DispatchParseRoute("{\"trip\":{\"summary\":{\"length\":1,\"time\":2},\"legs\":[{\"summary\":{\"length\":1,\"time\":2},\"shape\":\"_p~iF~ps|U_ulLnnqC_mqNvxq`@\"}]}}",&r));
     assert(r.ready && r.point_count==3 && r.distance_km==1);
     assert(fabs(r.points[0].lat-3.85)<0.000001);
     assert(!DispatchParseRoute("{\"trip\":{\"summary\":{\"length\":1,\"time\":2},\"legs\":[{\"shape\":\"_\"}]}}",&r));
     assert(!r.ready && r.point_count==0);
+    assert(DispatchParseRoute("{\"trip\":{\"summary\":{\"length\":0.222,\"time\":30},\"legs\":[{\"summary\":{\"length\":0.111,\"time\":10},\"shape\":\"???o}@\"},{\"summary\":{\"length\":0.111,\"time\":20},\"shape\":\"?o}@?o}@\"}]}}",&r));
+    assert(r.leg_count==2 && r.leg_end[0]==1 && r.leg_end[1]==3);
+    assert(r.leg_seconds[0]==10 && r.leg_seconds[1]==20);
+    assert(!DispatchParseRoute("{\"trip\":{\"summary\":{\"length\":1,\"time\":20},\"legs\":[{\"shape\":\"???o}@\"}]}}",&r));
     Package p[5]; DispatchSeed(p);
     assert(p[0].included && !p[0].delivered && strlen(p[0].id)>0);
     GeoPoint position=DISPATCH_DEPOT;
@@ -50,6 +54,7 @@ int main(int argc,char **argv)
     if(argc==2 && strcmp(argv[1],"--live")==0) {
         assert(DispatchPlan(p,&r));
         assert(r.ready && r.count==5 && r.point_count>5 && r.distance_km>0);
+        assert(r.leg_count==r.count && r.leg_end[4]==r.point_count-1);
         printf("Live route: %.3f km, %.0f seconds, %d road points; order",r.distance_km,r.duration_seconds,r.point_count);
         for(int i=0;i<r.count;++i)printf(" %d",r.order[i]+1);
         puts("");

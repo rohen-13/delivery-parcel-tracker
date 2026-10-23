@@ -3,6 +3,15 @@
 #include "dispatch.h"
 #include "sensors.h"
 #include "temperature_history.h"
+#define ROUND_RETAINED_ATTEMPTS 8
+typedef enum { ATTEMPT_DELIVERED, ATTEMPT_RECIPIENT_ABSENT, ATTEMPT_NO_ACCESS, ATTEMPT_ADDRESS_PROBLEM } AttemptOutcome;
+typedef struct { double seconds; AttemptOutcome outcome; } DeliveryAttempt;
+typedef enum { DRIVE_READY, DRIVE_RUNNING, DRIVE_PAUSED, DRIVE_ARRIVED } DriveState;
+typedef struct {
+    DriveState state;
+    int speed;
+    double elapsed_seconds, distance_m, total_m;
+} DeliveryRun;
 
 typedef struct {
     Package packages[DISPATCH_MAX_PACKAGES];
@@ -11,10 +20,23 @@ typedef struct {
     DeliveryRoute route;
     GeoPoint position;
     int selected;
+    DeliveryRun run;
+    bool deferred[DISPATCH_MAX_PACKAGES];
+    unsigned attempt_count[DISPATCH_MAX_PACKAGES];
+    DeliveryAttempt attempts[DISPATCH_MAX_PACKAGES][ROUND_RETAINED_ATTEMPTS];
 } DeliveryRound;
 
 void RoundReset(DeliveryRound *round);
-enum { ROUND_ISSUE_CONNECTION=1, ROUND_ISSUE_HEAT=2, ROUND_ISSUE_IMPACT=4 };
+bool RoundDriveStart(DeliveryRound *round);
+void RoundDrivePause(DeliveryRound *round);
+bool RoundDriveSpeed(DeliveryRound *round,int multiplier);
+bool RoundCanAttempt(const DeliveryRound *round);
+enum { ROUND_ISSUE_CONNECTION=1, ROUND_ISSUE_HEAT=2, ROUND_ISSUE_IMPACT=4, ROUND_ISSUE_DELIVERY=8 };
+const char *RoundAttemptName(AttemptOutcome outcome);
+bool RoundFailNext(DeliveryRound *round,AttemptOutcome outcome);
+bool RoundRetry(DeliveryRound *round,int index);
+bool RoundWriteAttemptsCSV(const DeliveryRound *round,FILE *output);
+bool RoundExportAttemptsCSV(const DeliveryRound *round,const char *directory,char *name,size_t capacity);
 unsigned RoundPackageIssues(const DeliveryRound *round,int index);
 int RoundIssueCount(const DeliveryRound *round);
 bool RoundSelectNextIssue(DeliveryRound *round);

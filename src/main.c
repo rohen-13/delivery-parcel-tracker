@@ -17,6 +17,7 @@ int main(void)
         float delta_seconds = GetFrameTime();
         if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
         if (DashboardSignedIn()) {
+            if(DashboardAccountPage())RoundDrivePause(&round);
             RoundUpdate(&round,delta_seconds);
         }
         DispatchUIUpdate();
