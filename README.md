@@ -126,3 +126,7 @@ Each package retains its own history. Undelivered packages update while the prof
 ## Package event filters
 
 On Package monitoring, the event panel now lists the newest matching events first. Choose All, Heat (scenario changes and alerts), Impact, or Link (disconnect/reconnect). Newer and Older navigate five events per page through the selected parcel's retained history. Switching parcel or filter returns to the newest page. Empty categories show No matching events; unavailable navigation is disabled. At most 32 events remain available, so events already evicted from memory cannot be recovered here. Filters affect only this view: package CSV export still includes the full retained history. Archived parcels can be filtered too.
+
+## Delivery attempt history
+
+On Package monitoring, choose **Delivery attempts** in the history panel to inspect the selected parcel's latest eight retained delivery attempts, newest first. Each entry shows its original attempt number, elapsed monitoring seconds and outcome (delivered, recipient absent, no access or address problem). The total attempt count remains visible when older records roll off; a parcel with no attempts shows an empty-state message. Switch parcels to inspect their independent histories, including delivered archives. Choose **Sensor events** to return to the existing event filters and pagination. **Export attempts (A)** still exports retained attempts chronologically. Reset and sign-out clear the in-memory history; manual checkpoints restore it.
