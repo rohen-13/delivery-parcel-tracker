@@ -7,6 +7,49 @@ static DeliveryRound round;
 int main(int argc,char **argv)
 {
     RoundReset(&round);
+    assert(!RoundFailNext(&round,ATTEMPT_NO_ACCESS));
+    round.route.ready=true;round.route.count=2;round.route.order[0]=0;round.route.order[1]=1;
+    assert(!RoundFailNext(&round,ATTEMPT_DELIVERED));
+    RoundSelect(&round,1);assert(!RoundFailNext(&round,ATTEMPT_NO_ACCESS));
+    RoundSelect(&round,0);RoundUpdate(&round,2);
+    assert(RoundFailNext(&round,ATTEMPT_RECIPIENT_ABSENT));
+    assert(round.deferred[0] && !round.packages[0].delivered && !round.packages[0].included);
+    assert(!round.route.ready && round.position.lat==round.packages[0].point.lat);
+    assert(round.attempt_count[0]==1 && round.attempts[0][0].seconds==2);
+    assert(RoundPackageIssues(&round,0)&ROUND_ISSUE_DELIVERY);
+    assert(!RoundSetIncluded(&round,0,true));
+    RoundUpdate(&round,2);assert(round.sensors[0].seconds==4);
+    assert(RoundRetry(&round,0) && round.packages[0].included && !round.deferred[0]);
+    assert(!RoundRetry(&round,0) && !RoundRetry(&round,5));
+    round.route.ready=true;round.route.count=1;round.route.order[0]=0;
+    assert(RoundDeliverNext(&round) && round.attempt_count[0]==2);
+    assert(round.attempts[0][1].outcome==ATTEMPT_DELIVERED);
+    assert(!RoundRetry(&round,0) && RoundPackageIssues(&round,0)==0);
+    FILE *attempt_csv=tmpfile();assert(attempt_csv && RoundWriteAttemptsCSV(&round,attempt_csv));
+    rewind(attempt_csv);char attempt_text[2048]={0};
+    assert(fread(attempt_text,1,sizeof(attempt_text)-1,attempt_csv)>0);fclose(attempt_csv);
+    assert(strstr(attempt_text,"Recipient absent") && strstr(attempt_text,"Delivered"));
+    RoundReset(&round);
+    for(int i=0;i<10;++i) {
+        round.route.ready=true;round.route.count=1;round.route.order[0]=0;
+        assert(RoundFailNext(&round,ATTEMPT_ADDRESS_PROBLEM));
+        assert(RoundRetry(&round,0));
+    }
+    assert(round.attempt_count[0]==10);
+    attempt_csv=tmpfile();assert(attempt_csv && RoundWriteAttemptsCSV(&round,attempt_csv));
+    rewind(attempt_csv);memset(attempt_text,0,sizeof(attempt_text));
+    assert(fread(attempt_text,1,sizeof(attempt_text)-1,attempt_csv)>0);fclose(attempt_csv);
+    assert(strstr(attempt_text,"\"PKG-001\",3,") && strstr(attempt_text,"\"PKG-001\",10,"));
+    assert(!strstr(attempt_text,"\"PKG-001\",1,"));
+    round.route.ready=true;round.route.count=1;round.route.order[0]=0;
+    assert(!RoundFailNext(&round,(AttemptOutcome)99));
+    assert(round.attempt_count[0]==10 && round.route.ready);
+    assert(RoundFailNext(&round,ATTEMPT_NO_ACCESS));
+    attempt_csv=tmpfile();assert(attempt_csv && RoundWriteSummaryCSV(&round,attempt_csv));
+    rewind(attempt_csv);memset(attempt_text,0,sizeof(attempt_text));
+    assert(fread(attempt_text,1,sizeof(attempt_text)-1,attempt_csv)>0);fclose(attempt_csv);
+    assert(strstr(attempt_text,",deferred,,connected,") && strstr(attempt_text,",11,\"No access\""));
+    RoundReset(&round);assert(round.attempt_count[0]==0 && !round.deferred[0]);
     assert(RoundIssueCount(&round)==0 && !RoundSelectNextIssue(&round));
     assert(round.selected==0 && RoundPackageIssues(&round,-1)==0);
     SensorsTriggerImpact(&round.sensors[2]);
@@ -72,6 +115,10 @@ int main(int argc,char **argv)
     assert(!RoundExportCSV(&round,"/definitely-missing-round-export",name,sizeof(name)) && !name[0]);
     if(argc==2) {
         char first[64],second[64],path[4096];
+        assert(RoundExportAttemptsCSV(&round,argv[1],first,sizeof(first)));
+        assert(RoundExportAttemptsCSV(&round,argv[1],second,sizeof(second)));
+        assert(strcmp(first,second)!=0 && strstr(first,"PKG-001-attempts-"));
+        assert(!RoundExportAttemptsCSV(&round,"/definitely-missing-round-export",name,sizeof(name)));
         assert(RoundExportSummaryCSV(&round,argv[1],first,sizeof(first)));
         assert(RoundExportSummaryCSV(&round,argv[1],second,sizeof(second)));
         assert(strcmp(first,second)!=0 && strstr(first,"round-summary-"));

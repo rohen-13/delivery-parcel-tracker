@@ -1,4 +1,5 @@
 #include "dashboard.h"
+#include "ui_typography.h"
 #include "account.h"
 #include "event_view.h"
 #include "temperature_history.h"
@@ -7,14 +8,16 @@
 #include <stddef.h>
 #include <stdio.h>
 
-static const Color BG = {12,17,23,255}, SURFACE = {20,28,36,255};
-static const Color INK = {235,240,246,255}, MUTED = {153,170,186,255};
-static const Color BORDER = {43,57,69,255}, ACCENT = {203,239,105,255};
+static const Color BG = {12,18,29,255}, SURFACE = {23,32,46,255};
+static const Color INK = {240,245,250,255}, MUTED = {170,185,203,255};
+static const Color BORDER = {55,72,90,255}, ACCENT = {92,224,196,255};
 static const Color GOOD = {121,216,177,255}, AMBER = {255,185,112,255};
-static Font font;
+static Font font,heading_font;
 static bool custom_font;
 static int export_status[5];
 static char export_name[5][64];
+static int attempt_export_status[5];
+static char attempt_export_name[5][64];
 
 static Account account;
 static EventFilter event_filter;
@@ -58,22 +61,23 @@ static void ExportEvents(const DeliveryRound *round)
 void DashboardClearExportStatus(void)
 {
     memset(export_status,0,sizeof(export_status));
+    memset(attempt_export_status,0,sizeof(attempt_export_status));
+    event_package=-1;event_page=0;
 }
 
 void DashboardInit(void)
 {
-    const char *path = "/System/Library/Fonts/Supplemental/Arial.ttf";
-    custom_font = FileExists(path);
-    font = custom_font ? LoadFontEx(path, 64, NULL, 0) : GetFontDefault();
-    SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+    font=ParcelFont(false);heading_font=ParcelFont(true);
+    custom_font=font.texture.id!=GetFontDefault().texture.id;
 }
 void DashboardClose(void)
 {
     if (custom_font) UnloadFont(font);
+    if(heading_font.texture.id!=GetFontDefault().texture.id)UnloadFont(heading_font);
 }
 static void Text(const char *value, float x, float y, float size, Color color)
 {
-    DrawTextEx(font, value, (Vector2){x,y}, size, 0, color);
+    DrawTextEx(size>=20?heading_font:font, value, (Vector2){x,y}, fmaxf(size,14), 0, color);
 }
 static void Card(Rectangle r)
 {
@@ -147,11 +151,15 @@ int DashboardDrawMonitoring(DeliveryRound *round)
         Text(round->packages[i].destination,32,y+72,13,MUTED);
     }
     Text("Simulated sensor readings",28,940,14,MUTED);
+    int selected=round->selected;
+    if(Button((Rectangle){24,714,240,44},"Export attempts (A)",round->attempt_count[selected]>0,false) ||
+       (round->attempt_count[selected]>0 && IsKeyPressed(KEY_A)))
+        attempt_export_status[selected]=RoundExportAttemptsCSV(round,GetApplicationDirectory(),attempt_export_name[selected],sizeof(attempt_export_name[selected]))?1:-1;
     int issues=RoundIssueCount(round);
     if(Button((Rectangle){24,784,240,44},"Next parcel to check (N)",issues>0,false) || (issues>0&&IsKeyPressed(KEY_N)))
         RoundSelectNextIssue(round);
-    Text(TextFormat("%d undelivered parcels flagged",issues),28,852,14,issues?AMBER:GOOD);
-    Text("Heat / impact history / offline",28,882,13,MUTED);
+    Text(TextFormat("%d parcel%s needing attention",issues,issues==1?"":"s"),28,852,14,issues?AMBER:GOOD);
+    Text("Heat / impact / offline / deferred",28,882,13,MUTED);
     Text("Up / Down  Select package",28,972,13,MUTED);
     DrawLine(288,0,288,1040,BORDER);
     int index=round->selected;
@@ -160,10 +168,18 @@ int DashboardDrawMonitoring(DeliveryRound *round)
     Text(TextFormat("%s / %s",package->id,package->destination),316,82,20,INK);
     const char *delivery=package->delivered?"Delivered / readings archived":"Not included in the planned round";
     if(!package->delivered && package->included)delivery="Included / route not planned";
+    if(round->deferred[index])delivery="Delivery deferred / retry from Dispatch";
     if(!package->delivered && round->route.ready)
         for(int i=0;i<round->route.count;++i)if(round->route.order[i]==index)
             delivery=TextFormat("Planned delivery stop %d of %d",i+1,round->route.count);
     Text(delivery,316,122,16,package->delivered?GOOD:MUTED);
+    if(round->route.ready && round->route.count && round->route.order[0]==index)
+        Text(round->run.state==DRIVE_RUNNING?"Driver en route":round->run.state==DRIVE_PAUSED?"Driver paused":
+             round->run.state==DRIVE_ARRIVED?"Driver arrived / record outcome in Dispatch":"Driver ready to depart",812,122,15,ACCENT);
+    unsigned attempts=round->attempt_count[index];
+    if(attempts)Text(TextFormat("%u attempt%s / last: %s at %.1f s",attempts,attempts==1?"":"s",
+        RoundAttemptName(round->attempts[index][(attempts-1)%ROUND_RETAINED_ATTEMPTS].outcome),
+        round->attempts[index][(attempts-1)%ROUND_RETAINED_ATTEMPTS].seconds),316,154,13,MUTED);
     bool active=!package->delivered;
     bool alert=SensorsHeatAlert(sensors);
     Card((Rectangle){316,184,448,284});
@@ -208,7 +224,9 @@ int DashboardDrawMonitoring(DeliveryRound *round)
     Text(TextFormat("%u matches / page %u of %u",view.total,view.pages?view.page+1:0,view.pages),912,910,12,MUTED);
     Text(TextFormat("Unobserved time %.1f s",sensors->unobserved_seconds),912,938,12,MUTED);
     if(export_status[index])Text(export_status[index]>0?"Package CSV saved beside app":"Export failed. Check folder access.",912,958,12,export_status[index]>0?GOOD:AMBER);
-    Text(TextFormat("%s / %s / Simulated telemetry",package->id,package->destination),316,1008,13,MUTED);
+    Text(attempt_export_status[index]?attempt_export_status[index]>0?
+         TextFormat("Saved %s beside app executable",attempt_export_name[index]):"Attempt export failed. Check folder access.":
+         TextFormat("%s / %s / Simulated telemetry",package->id,package->destination),316,1008,13,MUTED);
     return 0;
 }
 static void Input(Rectangle bounds, char *buffer, size_t capacity, int id,

@@ -183,17 +183,18 @@ static bool Delta(const char **p,int64_t *v)
 }
 bool DispatchParseRoute(const char *s,DeliveryRoute *r)
 {
-    r->ready=false; r->point_count=0;
+    r->ready=false; r->point_count=0;r->leg_count=0;
     Json j; if(!Parse(&j,s)) return false;
     int trip=Field(&j,0,"trip"), summary=Field(&j,trip,"summary"), legs=Field(&j,trip,"legs");
     double km,seconds;
     bool ok=Number(&j,Field(&j,summary,"length"),&km) &&
         Number(&j,Field(&j,summary,"time"),&seconds) && legs>=0 &&
-        j.t[legs].type=='[' && j.t[legs].count>0;
+        j.t[legs].type=='[' && j.t[legs].count>0 && j.t[legs].count<=DISPATCH_MAX_PACKAGES;
     char *shape=malloc(131072);
     if(!shape) ok=false;
     int leg=ok?legs+1:0;
     for(int i=0;ok && i<j.t[legs].count;++i) {
+        int begin=r->point_count;
         ok=String(&j,Field(&j,leg,"shape"),shape,131072);
         const char *p=shape; int64_t lat=0,lon=0,a,b;
         while(ok && *p) {
@@ -204,11 +205,20 @@ bool DispatchParseRoute(const char *s,DeliveryRoute *r)
             if(fabs(point.lat)>85 || fabs(point.lon)>180) {ok=false;break;}
             r->points[r->point_count++]=point;
         }
+        int leg_summary=Field(&j,leg,"summary");
+        ok=ok && Number(&j,Field(&j,leg_summary,"time"),&r->leg_seconds[i]) &&
+            Number(&j,Field(&j,leg_summary,"length"),&r->leg_km[i]);
+        if(r->point_count-begin<2)ok=false;
+        if(ok && r->leg_km[i]>0 && r->leg_seconds[i]==0)ok=false;
+        if(ok && begin && (fabs(r->points[begin].lat-r->points[begin-1].lat)>.0001 ||
+                          fabs(r->points[begin].lon-r->points[begin-1].lon)>.0001))ok=false;
+        r->leg_end[i]=r->point_count-1;
         leg=j.t[leg].next;
     }
+    int leg_count=ok?j.t[legs].count:0;
     free(shape);free(j.t);
     if(!ok || r->point_count<2) {r->point_count=0;return false;}
-    r->distance_km=km;r->duration_seconds=seconds;r->ready=true;return true;
+    r->leg_count=leg_count;r->distance_km=km;r->duration_seconds=seconds;r->ready=true;return true;
 }
 bool DispatchFetch(const char *url,const char *json,unsigned char *data,size_t capacity,size_t *size)
 {
@@ -290,9 +300,10 @@ bool DispatchPlanFrom(const Package p[5],GeoPoint position,DeliveryRoute *r)
         ok=DispatchFetch("https://valhalla1.openstreetmap.de/route",request,response,1048577,&size) && DispatchParseRoute((char *)response,r);
     }
     free(response);
+    if(ok && r->leg_count!=count)ok=false;
     if(ok) {
         r->count=count;for(int i=0;i<count;++i)r->order[i]=index[order[i]];
         snprintf(r->message,sizeof(r->message),"Distance-based driving route ready. Estimates, not live traffic.");
-    } else snprintf(r->message,sizeof(r->message),"Routing unavailable or no drivable path. Check internet and retry.");
+    } else {r->ready=false;snprintf(r->message,sizeof(r->message),"Routing unavailable or no drivable path. Check internet and retry.");}
     return ok;
 }
