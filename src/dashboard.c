@@ -22,6 +22,7 @@ static char attempt_export_name[5][64];
 static Account account;
 static EventFilter event_filter;
 static unsigned event_page;
+static bool show_attempts;
 static int event_package = -1;
 static bool profile_page, show_password, login_error;
 static char username[33] = "demo", password[65], edit_name[49];
@@ -62,7 +63,7 @@ void DashboardClearExportStatus(void)
 {
     memset(export_status,0,sizeof(export_status));
     memset(attempt_export_status,0,sizeof(attempt_export_status));
-    event_package=-1;event_page=0;
+    event_package=-1;event_page=0;show_attempts=false;
 }
 
 void DashboardInit(void)
@@ -200,29 +201,46 @@ int DashboardDrawMonitoring(DeliveryRound *round)
     if(Button((Rectangle){812,412,416,40},"Export package events (E)",true,false)||IsKeyPressed(KEY_E))ExportEvents(round);
     TemperatureGraph(sensors,&round->histories[index],package->delivered);
     Card((Rectangle){888,492,364,492});
-    Text("Recent package events",912,516,20,INK);
+    if(Button((Rectangle){912,506,150,40},"Sensor events",true,!show_attempts))show_attempts=false;
+    if(Button((Rectangle){1074,506,154,40},"Delivery attempts",true,show_attempts))show_attempts=true;
     Text(package->delivered?"Archived / newest first":"Live history / newest first",912,552,13,MUTED);
     if (event_package != index) { event_package=index; event_page=0; }
-    const char *filters[]={"All","Heat","Impact","Link"};
-    for (int i=0;i<4;++i) {
-        if (Button((Rectangle){912+i*80,578,72,36},filters[i],true,(int)event_filter==i)) {
-            event_filter=(EventFilter)i;
-            event_page=0;
+    if(show_attempts) {
+        unsigned retained=attempts<ROUND_RETAINED_ATTEMPTS?attempts:ROUND_RETAINED_ATTEMPTS;
+        Text(TextFormat("Latest %u of %u attempts",retained,attempts),912,594,16,MUTED);
+        for(unsigned i=0;i<retained;++i) {
+            unsigned number=attempts-i;
+            const DeliveryAttempt *attempt=&round->attempts[index][(number-1)%ROUND_RETAINED_ATTEMPTS];
+            float y=624+i*34;
+            Text(TextFormat("#%u / %.1fs",number,attempt->seconds),912,y,14,MUTED);
+            Text(RoundAttemptName(attempt->outcome),912,y+16,14,
+                 attempt->outcome==ATTEMPT_DELIVERED?GOOD:AMBER);
         }
+        if(!retained)Text("No delivery attempts yet",912,650,16,MUTED);
+        Text("Newest first / monitoring seconds",912,910,14,MUTED);
+        Text("Export attempts (A) saves retained history",912,938,14,MUTED);
+    } else {
+        const char *filters[]={"All","Heat","Impact","Link"};
+        for (int i=0;i<4;++i) {
+            if (Button((Rectangle){912+i*80,578,72,36},filters[i],true,(int)event_filter==i)) {
+                event_filter=(EventFilter)i;
+                event_page=0;
+            }
+        }
+        EventView view=EventViewBuild(sensors,event_filter,event_page);
+        event_page=view.page;
+        for (unsigned i=0;i<view.count;++i) {
+            const SensorEvent *event=&sensors->events[view.indices[i]];
+            float y=636+i*40;
+            Text(TextFormat("%.1fs",event->seconds),912,y,12,MUTED);
+            Text(SensorsEventName(event->kind),976,y,13,INK);
+        }
+        if (!view.count) Text("No matching events",912,650,16,MUTED);
+        if (Button((Rectangle){912,854,144,40},"Newer",event_page>0,false)) --event_page;
+        if (Button((Rectangle){1072,854,156,40},"Older",view.pages && event_page+1<view.pages,false)) ++event_page;
+        Text(TextFormat("%u matches / page %u of %u",view.total,view.pages?view.page+1:0,view.pages),912,910,12,MUTED);
+        Text(TextFormat("Unobserved time %.1f s",sensors->unobserved_seconds),912,938,12,MUTED);
     }
-    EventView view=EventViewBuild(sensors,event_filter,event_page);
-    event_page=view.page;
-    for (unsigned i=0;i<view.count;++i) {
-        const SensorEvent *event=&sensors->events[view.indices[i]];
-        float y=636+i*40;
-        Text(TextFormat("%.1fs",event->seconds),912,y,12,MUTED);
-        Text(SensorsEventName(event->kind),976,y,13,INK);
-    }
-    if (!view.count) Text("No matching events",912,650,16,MUTED);
-    if (Button((Rectangle){912,854,144,40},"Newer",event_page>0,false)) --event_page;
-    if (Button((Rectangle){1072,854,156,40},"Older",view.pages && event_page+1<view.pages,false)) ++event_page;
-    Text(TextFormat("%u matches / page %u of %u",view.total,view.pages?view.page+1:0,view.pages),912,910,12,MUTED);
-    Text(TextFormat("Unobserved time %.1f s",sensors->unobserved_seconds),912,938,12,MUTED);
     if(export_status[index])Text(export_status[index]>0?"Package CSV saved beside app":"Export failed. Check folder access.",912,958,12,export_status[index]>0?GOOD:AMBER);
     Text(attempt_export_status[index]?attempt_export_status[index]>0?
          TextFormat("Saved %s beside app executable",attempt_export_name[index]):"Attempt export failed. Check folder access.":
